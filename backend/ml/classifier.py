@@ -42,6 +42,13 @@ def classify_log(text):
         _model = get_or_train_model()
 
     try:
+        from ml.preprocess import preprocess
+        text = preprocess(text)
+        if not text.strip():
+            from worklogs.models import Category
+            cat, _ = Category.objects.get_or_create(name='Unrelated / General')
+            return cat
+
         proba = _model.predict_proba([text])[0]
         max_confidence = proba.max()
 

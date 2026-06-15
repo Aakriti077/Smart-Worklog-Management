@@ -240,6 +240,13 @@ def assign_cluster(text):
         _train()
 
     try:
+        from ml.preprocess import preprocess
+        text = preprocess(text)
+        if not text.strip():
+            from worklogs.models import Cluster
+            cluster, _ = Cluster.objects.get_or_create(name='Unrelated / General')
+            return cluster
+
         raw_vec = _vectorizer.transform([text])
 
         # Check how many vocabulary words the text actually contains.
