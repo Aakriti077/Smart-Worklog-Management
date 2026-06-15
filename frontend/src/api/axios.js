@@ -6,9 +6,9 @@ import axios from 'axios'
 // Set the base URL so we don't repeat it in every API call
 const api = axios.create({ baseURL: 'http://localhost:8000/api' })
 
-// Before every request, attach the JWT token from localStorage to the Authorization header
+// Before every request, attach the JWT token from sessionStorage to the Authorization header
 api.interceptors.request.use(config => {
-  const token = localStorage.getItem('access')
+  const token = sessionStorage.getItem('access')
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
@@ -20,7 +20,7 @@ api.interceptors.response.use(
   async err => {
     const isLoginCall = err.config?.url?.includes('/auth/login/')
     if (err.response?.status === 401 && !isLoginCall) {
-      localStorage.clear()
+      sessionStorage.clear()
       window.location.href = '/login'
     }
     return Promise.reject(err)

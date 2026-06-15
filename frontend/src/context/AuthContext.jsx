@@ -7,7 +7,7 @@ const AuthContext = createContext()
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try {
-      const u = localStorage.getItem('user')
+      const u = sessionStorage.getItem('user')
       return u ? JSON.parse(u) : null
     } catch {
       return null
@@ -17,22 +17,21 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     const res = await api.post('/auth/login/', { email, password })
     const { access, refresh, user: userData } = res.data
-    localStorage.setItem('access', access)
-    localStorage.setItem('refresh', refresh)
-    localStorage.setItem('user', JSON.stringify(userData))
+    sessionStorage.setItem('access', access)
+    sessionStorage.setItem('refresh', refresh)
+    sessionStorage.setItem('user', JSON.stringify(userData))
     setUser(userData)
     return userData
   }
 
   const updateUser = (patch) => {
     const updated = { ...user, ...patch }
-    localStorage.setItem('user', JSON.stringify(updated))
+    sessionStorage.setItem('user', JSON.stringify(updated))
     setUser(updated)
   }
 
   const logout = () => {
-    localStorage.clear()
-    // Full page reload ensures all state is cleared cleanly
+    sessionStorage.clear()
     window.location.href = '/login'
   }
 
