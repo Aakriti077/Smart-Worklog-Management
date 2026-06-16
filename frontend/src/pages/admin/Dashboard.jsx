@@ -114,16 +114,12 @@ export default function AdminDashboard() {
       {/* ── 1. Stat Cards ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 22 }}>
         <StatCard label="Total Users" value={overview?.total_users}
-          sub={`${overview?.active_users ?? 0} active · ${overview?.inactive_users ?? 0} inactive`}
           icon={Users} color="#4f46e5" />
         <StatCard label="Departments" value={overview?.total_departments}
-          sub={`${overview?.total_managers ?? 0} managers assigned`}
           icon={Building2} color="#059669" />
         <StatCard label="Logs This Week" value={overview?.logs_this_week}
-          sub={`${overview?.total_logs ?? 0} total submissions`}
           icon={FileText} color="#d97706" />
         <StatCard label="KPI Evaluations" value={overview?.kpis_this_week ?? overview?.total_kpi_records}
-          sub={`${overview?.total_kpi_records ?? 0} total calculated`}
           icon={BarChart2} color="#7c3aed" />
       </div>
 
