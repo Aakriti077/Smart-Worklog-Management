@@ -7,7 +7,7 @@ import {
   CheckCircle, AlertCircle
 } from 'lucide-react'
 import {
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
+  Tooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts'
 
@@ -78,8 +78,6 @@ function QuickActionBtn({ label, sub, icon: Icon, color, onClick }) {
   )
 }
 
-const DONUT_COLORS = ['#4f46e5', '#059669', '#f59e0b']
-
 export default function AdminDashboard() {
   const [overview, setOverview] = useState(null)
   const [users, setUsers] = useState([])
@@ -94,16 +92,6 @@ export default function AdminDashboard() {
   }, [])
 
   if (loading) return <div className="loading-page"><div className="spinner" /></div>
-
-  const employees = users.filter(u => u.role === 'employee').length
-  const managers  = users.filter(u => u.role === 'manager').length
-  const admins    = users.filter(u => u.role === 'admin').length
-
-  const donutData = [
-    { name: 'Employees', value: employees },
-    { name: 'Managers',  value: managers },
-    { name: 'Admins',    value: admins },
-  ].filter(d => d.value > 0)
 
   const deptPerf = (overview?.dept_performance || []).filter(d => d.avg_score !== null)
   const recentActivity = overview?.recent_activity || []
@@ -123,37 +111,8 @@ export default function AdminDashboard() {
           icon={BarChart2} color="#7c3aed" />
       </div>
 
-      {/* ── 2. Charts: Distribution + Dept Performance + Top Performers ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1.4fr', gap: 16, marginBottom: 16 }}>
-
-        {/* Donut */}
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">User Distribution</div>
-            <div className="card-subtitle">{employees + managers + admins} accounts</div>
-          </div>
-          <div className="card-body">
-            <ResponsiveContainer width="100%" height={130}>
-              <PieChart>
-                <Pie data={donutData} cx="50%" cy="50%" innerRadius={40} outerRadius={56} dataKey="value" paddingAngle={3}>
-                  {donutData.map((entry, i) => <Cell key={entry.name} fill={DONUT_COLORS[i]} />)}
-                </Pie>
-                <Tooltip formatter={(v, n) => [v, n]} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div style={{ marginTop: 10 }}>
-              {[{ name: 'Employees', val: employees, color: '#4f46e5' }, { name: 'Managers', val: managers, color: '#059669' }, { name: 'Admins', val: admins, color: '#f59e0b' }].map(r => (
-                <div key={r.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: r.color }} />
-                    <span style={{ fontSize: 12.5, color: '#64748b' }}>{r.name}</span>
-                  </div>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: r.color }}>{r.val}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+      {/* ── 2. Charts: Dept Performance + Top Performers ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 16, marginBottom: 16 }}>
 
         {/* Dept Performance */}
         <div className="card">
