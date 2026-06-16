@@ -48,8 +48,7 @@ export default function Sidebar() {
     <div className="sidebar">
       {/* Logo */}
       <div className="sidebar-logo">
-        <div className="logo-text">SmartPerform</div>
-        <div className="logo-sub">Performance System</div>
+        <div className="logo-text">Smart Worklog</div>
       </div>
 
       {/* Scrollable middle: nav + account pinned above footer */}
@@ -57,9 +56,6 @@ export default function Sidebar() {
 
         {/* Main navigation — scrollable */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
-          <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.8, color: '#475569', padding: '8px 8px 4px' }}>
-            Menu
-          </div>
           {navItems.map(item => {
             const Icon = item.icon
             const active = location.pathname === item.path
@@ -78,9 +74,6 @@ export default function Sidebar() {
 
         {/* Account section — always pinned above footer, never scrolls away */}
         <div style={{ padding: '8px 12px', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-          <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.8, color: '#475569', padding: '8px 8px 4px' }}>
-            Account
-          </div>
           <button
             className={`nav-item ${location.pathname === '/profile' ? 'active' : ''}`}
             onClick={() => navigate('/profile')}
