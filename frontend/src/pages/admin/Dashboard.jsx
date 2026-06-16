@@ -113,7 +113,7 @@ export default function AdminDashboard() {
 
       {/* ── 1. Stat Cards ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 22 }}>
-        <StatCard label="Total Employees" value={overview?.total_employees}
+        <StatCard label="Total Users" value={overview?.total_users}
           sub={`${overview?.active_users ?? 0} active · ${overview?.inactive_users ?? 0} inactive`}
           icon={Users} color="#4f46e5" />
         <StatCard label="Departments" value={overview?.total_departments}

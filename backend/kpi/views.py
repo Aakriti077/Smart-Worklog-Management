@@ -111,6 +111,7 @@ class AdminOverviewView(APIView):
         ]
 
         return Response({
+            'total_users':       User.objects.count(),
             'total_employees':   User.objects.filter(role='employee').count(),
             'total_managers':    User.objects.filter(role='manager').count(),
             'total_departments': Department.objects.count(),
