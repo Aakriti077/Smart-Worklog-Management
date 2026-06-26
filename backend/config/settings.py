@@ -19,6 +19,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
+    'drf_spectacular',
     'authentication',
     'users',
     'departments',
@@ -79,6 +80,19 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Smart WorkLog Management API',
+    'DESCRIPTION': (
+        'REST API for the Smart Employee Performance Evaluation System. '
+        'Covers authentication, work logs, KPI scoring, AI-powered summaries, '
+        'ML classification, tasks, users, and departments.'
+    ),
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
 }
 
 SIMPLE_JWT = {

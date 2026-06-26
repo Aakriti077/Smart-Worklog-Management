@@ -34,15 +34,14 @@ export default function Login() {
 
   return (
     <div className="login-page">
-      <div style={{ width: '100%', maxWidth: 440 }}>
-        {/* Header above card */}
+      <div style={{ width: '100%', maxWidth: 420 }}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <div style={{ fontSize: 26, fontWeight: 800, color: '#fff', letterSpacing: -0.5 }}>Smart Worklog Management</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: '#fff', letterSpacing: -0.5 }}>Smart Worklog Management</div>
         </div>
 
         <div className="login-card">
-          <div className="login-title">Sign in to your account</div>
-          <div className="login-sub">Enter your credentials to continue</div>
+          <div className="login-title" style={{ textAlign: 'center' }}>Sign in to your account</div>
+          <div className="login-sub" style={{ textAlign: 'center' }}>Enter your credentials to continue</div>
 
           {error && <div className="alert alert-error">{error}</div>}
 
@@ -105,7 +104,6 @@ export default function Login() {
               {loading ? <><span className="spinner" style={{ width: 16, height: 16 }} /> Signing in...</> : 'Sign In'}
             </button>
           </form>
-
         </div>
       </div>
     </div>

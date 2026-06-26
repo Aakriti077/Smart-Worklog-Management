@@ -48,7 +48,7 @@ export default function Sidebar() {
     <div className="sidebar">
       {/* Logo */}
       <div className="sidebar-logo">
-        <div className="logo-text">Smart Worklog</div>
+        <div className="logo-text">Smart Worklog System</div>
       </div>
 
       {/* Scrollable middle: nav + account pinned above footer */}

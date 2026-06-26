@@ -50,6 +50,10 @@ class UserDetailView(APIView):
             user = User.objects.get(pk=pk)
         except User.DoesNotExist:
             return Response({'error': 'Not found'}, status=404)
+        if user.role == 'admin' and ('role' in request.data or 'department' in request.data):
+            return Response({'error': 'Cannot change role or department of an admin account.'}, status=403)
+        if request.data.get('role') == 'admin':
+            return Response({'error': 'Cannot promote a user to admin role.'}, status=403)
         serializer = UserSerializer(user, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
@@ -61,7 +65,12 @@ class UserDetailView(APIView):
             user = User.objects.get(pk=pk)
         except User.DoesNotExist:
             return Response({'error': 'Not found'}, status=404)
-        user.delete()
+        if user.role == 'admin':
+            return Response({'error': 'Cannot delete an admin account.'}, status=403)
+        try:
+            user.delete()
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
         return Response(status=204)
 
 

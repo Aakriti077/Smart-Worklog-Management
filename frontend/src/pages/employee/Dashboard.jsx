@@ -2,22 +2,9 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import api from '../../api/axios'
-import { FileText, Calendar, TrendingUp, Award, Plus, ListChecks } from 'lucide-react'
-import {
-  RadarChart, Radar, PolarGrid, PolarAngleAxis,
-  ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid
-} from 'recharts'
+import { FileText, Calendar, Award, ListChecks, Zap, Sparkles, Plus } from 'lucide-react'
 
-function scoreColor(s) {
-  s = parseFloat(s)
-  return s >= 75 ? '#059669' : s >= 50 ? '#d97706' : '#dc2626'
-}
-function scoreClass(s) {
-  s = parseFloat(s)
-  return s >= 75 ? 'high' : s >= 50 ? 'medium' : 'low'
-}
-
-function StatCard({ label, value, sub, icon: Icon, color }) {
+function StatCard({ label, value, icon: Icon, color, sub }) {
   return (
     <div style={{
       background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12,
@@ -36,7 +23,7 @@ function StatCard({ label, value, sub, icon: Icon, color }) {
           {label}
         </div>
         <div style={{ fontSize: 28, fontWeight: 800, color: '#1e293b', lineHeight: 1 }}>{value ?? '—'}</div>
-        {sub && <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 5 }}>{sub}</div>}
+        {sub && <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 4 }}>{sub}</div>}
       </div>
     </div>
   )
@@ -45,284 +32,216 @@ function StatCard({ label, value, sub, icon: Icon, color }) {
 export default function EmployeeDashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const [logs, setLogs] = useState([])
-  const [kpis, setKpis] = useState([])
-  const [tasks, setTasks] = useState([])
+  const [logs, setLogs]     = useState([])
+  const [tasks, setTasks]   = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    Promise.all([api.get('/worklogs/'), api.get('/kpi/me/'), api.get('/tasks/')])
-      .then(([l, k, t]) => { setLogs(l.data); setKpis(k.data); setTasks(t.data) })
+    Promise.all([api.get('/worklogs/'), api.get('/tasks/')])
+      .then(([l, t]) => { setLogs(l.data); setTasks(t.data) })
       .finally(() => setLoading(false))
   }, [])
 
   if (loading) return <div className="loading-page"><div className="spinner" /></div>
 
-  const latest = kpis[0]
+  // ── This-week stats ──
   const now = new Date()
+  const dayOfWeek = now.getDay()
   const mon = new Date(now)
-  mon.setDate(now.getDate() - now.getDay() + 1)
-  const thisWeekLogs = logs.filter(l => new Date(l.date) >= mon)
+  mon.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1))
+  mon.setHours(0, 0, 0, 0)
+  const thisWeekLogs = logs.filter(l => new Date(l.date + 'T00:00:00') >= mon)
 
   const totalPlanned   = thisWeekLogs.reduce((a, l) => a + l.tasks_planned, 0)
   const totalCompleted = thisWeekLogs.reduce((a, l) => a + l.tasks_completed, 0)
   const completionRate = totalPlanned > 0 ? Math.round((totalCompleted / totalPlanned) * 100) : null
 
-  const radarData = latest ? [
-    { m: 'Productivity', v: parseFloat(latest.productivity) },
-    { m: 'Consistency',  v: parseFloat(latest.consistency) },
-    { m: 'Quality',      v: parseFloat(latest.quality) },
-    { m: 'Leadership',   v: parseFloat(latest.leadership) },
-    { m: 'Collab',       v: parseFloat(latest.collaboration) },
-    { m: 'Innovation',   v: parseFloat(latest.innovation) },
-    { m: 'Learning',     v: parseFloat(latest.learning) },
-  ] : []
+  const openTasks = tasks.filter(t => t.status === 'pending' || t.status === 'in_progress')
+  const totalTasks = tasks.length
 
-  const kpiTrend = kpis.slice(0, 6).reverse().map(k => ({
-    week: k.week_start?.slice(5),
-    score: parseFloat(k.overall)
-  }))
+  // ── Streak ──
+  const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
+  const yesterday = (() => { const d = new Date(now); d.setDate(d.getDate()-1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
+  const sortedDates = [...new Set(logs.map(l => l.date))].sort().reverse()
+  let streak = 0
+  if (sortedDates[0] === today || sortedDates[0] === yesterday) {
+    for (let i = 0; i < sortedDates.length; i++) {
+      const base = new Date(sortedDates[0] + 'T00:00:00')
+      const d    = new Date(sortedDates[i] + 'T00:00:00')
+      if (Math.round((base - d) / 86400000) === i) streak++
+      else break
+    }
+  }
+
+  const hasLogToday = logs.some(l => l.date === today)
+
+  // ── Task breakdown ──
+  const taskBreakdown = {
+    completed:   tasks.filter(t => t.status === 'completed').length,
+    in_progress: tasks.filter(t => t.status === 'in_progress').length,
+    pending:     tasks.filter(t => t.status === 'pending').length,
+  }
+
+  const pColors = { low: '#059669', medium: '#4f46e5', high: '#d97706', urgent: '#dc2626' }
 
   return (
     <div className="page">
-      {/* Welcome */}
-      <div style={{ marginBottom: 22, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      {/* Welcome + quick actions */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 21, fontWeight: 700, color: '#1e293b' }}>Welcome back, {user?.name?.split(' ')[0]}</h1>
-          <p style={{ color: '#64748b', fontSize: 13.5, marginTop: 3 }}>
-            {user?.department_name || 'No department'} · Performance overview for this week
-          </p>
+          <h1 style={{ fontSize: 21, fontWeight: 700, color: '#1e293b', margin: 0 }}>
+            Welcome back, {user?.name?.split(' ')[0]}
+          </h1>
+          {!hasLogToday && (
+            <div style={{ fontSize: 12.5, color: '#d97706', marginTop: 4, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#d97706' }} />
+              No log submitted today yet
+            </div>
+          )}
         </div>
-        <button className="btn btn-primary" onClick={() => navigate('/employee/submit-log')}>
-          <Plus size={14} /> New Log
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-primary btn-sm" onClick={() => navigate('/employee/submit-log')} style={{ gap: 5 }}>
+            <Plus size={14} /> Submit Log
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={() => navigate('/employee/kpis')} style={{ gap: 5 }}>
+            <Award size={14} /> My KPIs
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={() => navigate('/employee/summaries')} style={{ gap: 5 }}>
+            <Sparkles size={14} /> Summary
+          </button>
+        </div>
       </div>
 
       {/* Stat cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14, marginBottom: 24 }}>
-        <StatCard
-          label="Total Logs"
-          value={logs.length}
-          sub="all time"
-          icon={FileText}
-          color="#4f46e5"
-        />
-        <StatCard
-          label="This Week"
-          value={thisWeekLogs.length}
-          sub="logs this week"
-          icon={Calendar}
-          color="#059669"
-        />
-        <StatCard
-          label="Overall KPI"
-          value={latest ? parseFloat(latest.overall).toFixed(1) : '—'}
-          sub="latest score"
-          icon={TrendingUp}
-          color={latest ? scoreColor(latest.overall) : '#94a3b8'}
-        />
-        <StatCard
-          label="Completion"
-          value={completionRate !== null ? `${completionRate}%` : '—'}
-          sub={completionRate !== null ? `${totalCompleted}/${totalPlanned} tasks` : 'no logs yet'}
-          icon={Award}
-          color="#d97706"
-        />
-        <StatCard
-          label="Open Tasks"
-          value={tasks.filter(t => t.status === 'pending' || t.status === 'in_progress').length}
-          sub={`${tasks.filter(t => t.status === 'in_progress').length} in progress`}
-          icon={ListChecks}
-          color="#7c3aed"
-        />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 20 }}>
+        <StatCard label="Total Logs"  value={logs.length}         icon={FileText}   color="#4f46e5" sub={`${thisWeekLogs.length} this week`} />
+        <StatCard label="Completion"  value={completionRate !== null ? `${completionRate}%` : '—'} icon={Award} color="#d97706" sub="this week" />
+        <StatCard label="Open Tasks"  value={openTasks.length}    icon={ListChecks} color="#7c3aed" sub={`${totalTasks} total`} />
+        <StatCard label="Log Streak"  value={streak || 0}         icon={Zap}        color="#059669" sub={streak === 1 ? 'day' : 'consecutive days'} />
       </div>
 
-      {/* KPI breakdown + Radar */}
-      <div className="grid-2 mb-20">
-        {latest ? (
-          <div className="card">
-            <div className="card-header">
-              <div>
-                <div className="card-title">KPI Breakdown</div>
-                <div className="card-subtitle">Week of {latest.week_start}</div>
-              </div>
-              <div style={{
-                padding: '4px 14px', borderRadius: 8,
-                background: scoreColor(latest.overall) + '18',
-                color: scoreColor(latest.overall),
-                fontSize: 22, fontWeight: 800,
-              }}>
-                {parseFloat(latest.overall).toFixed(1)}
-              </div>
-            </div>
-            <div className="card-body">
-              <div className="kpi-grid">
-                {[
-                  ['Productivity', latest.productivity],
-                  ['Consistency', latest.consistency],
-                  ['Quality', latest.quality],
-                  ['Diversity', latest.diversity],
-                  ['Leadership', latest.leadership],
-                  ['Collaboration', latest.collaboration],
-                  ['Innovation', latest.innovation],
-                  ['Learning', latest.learning],
-                ].map(([label, val]) => (
-                  <div className="kpi-card" key={label}>
-                    <div className="kpi-label">{label}</div>
-                    <div className={`kpi-score ${scoreClass(val)}`}>{parseFloat(val).toFixed(0)}</div>
-                    <div className="kpi-bar">
-                      <div className="kpi-bar-fill" style={{ width: `${parseFloat(val)}%`, background: scoreColor(val) }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+      {/* Assigned Tasks */}
+      <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 18 }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <ListChecks size={14} color="#7c3aed" />
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Assigned Tasks</span>
+          <button className="btn btn-secondary btn-sm" onClick={() => navigate('/employee/tasks')} style={{ marginLeft: 'auto' }}>View All</button>
+        </div>
+        {openTasks.length === 0 ? (
+          <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>No open tasks</div>
         ) : (
-          <div className="card">
-            <div className="card-body">
-              <div className="empty-state">
-                <TrendingUp size={32} color="#cbd5e1" style={{ margin: '0 auto 12px', display: 'block' }} />
-                <h3>No KPI Data Yet</h3>
-                <p>Submit work logs this week, then ask your manager to calculate your KPI.</p>
-                <button className="btn btn-primary" style={{ marginTop: 14 }} onClick={() => navigate('/employee/submit-log')}>
-                  Submit a Log
-                </button>
+          openTasks.slice(0, 4).map((t, i) => (
+            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '11px 20px', borderBottom: i < Math.min(openTasks.length, 4) - 1 ? '1px solid #f8fafc' : 'none' }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: pColors[t.priority] || '#4f46e5', flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: '#1e293b' }}>{t.title}</div>
+                <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 1 }}>From {t.assigned_by_name}{t.deadline ? ` · Due ${t.deadline}` : ''}</div>
               </div>
+              <span style={{ background: t.status === 'in_progress' ? '#eef2ff' : '#f1f5f9', color: t.status === 'in_progress' ? '#4f46e5' : '#64748b', borderRadius: 20, padding: '2px 10px', fontSize: 11.5, fontWeight: 700 }}>
+                {t.status.replace('_', ' ')}
+              </span>
             </div>
-          </div>
+          ))
         )}
-
-        {/* Radar */}
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">Performance Radar</div>
-            <div className="card-subtitle">Skills visual breakdown</div>
-          </div>
-          <div className="card-body">
-            {radarData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={240}>
-                <RadarChart data={radarData}>
-                  <PolarGrid stroke="#e2e8f0" />
-                  <PolarAngleAxis dataKey="m" tick={{ fontSize: 11, fill: '#64748b' }} />
-                  <Radar dataKey="v" stroke="#4f46e5" fill="#4f46e5" fillOpacity={0.2} strokeWidth={2} dot={{ r: 3, fill: '#4f46e5' }} />
-                  <Tooltip formatter={v => [v.toFixed(1), 'Score']} contentStyle={{ fontSize: 13, borderRadius: 8 }} />
-                </RadarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="empty-state"><p>Radar will appear after your first KPI evaluation</p></div>
-            )}
-          </div>
-        </div>
       </div>
 
-      {/* KPI Trend */}
-      {kpiTrend.length > 1 && (
-        <div className="card mb-20">
-          <div className="card-header">
-            <div className="card-title">KPI Score Trend</div>
-            <div className="card-subtitle">Overall score across recent weeks</div>
-          </div>
-          <div className="card-body">
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={kpiTrend} barCategoryGap="35%">
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                <XAxis dataKey="week" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                <Tooltip formatter={v => [v.toFixed(1), 'Overall Score']} contentStyle={{ fontSize: 13, borderRadius: 8 }} />
-                <Bar dataKey="score" fill="#4f46e5" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
+      {/* Task breakdown + Recent logs */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: 18 }}>
 
-      {/* Assigned Tasks snapshot */}
-      {tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled').length > 0 && (
-        <div className="card mb-20">
-          <div className="card-header">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <ListChecks size={15} color="#7c3aed" />
-              <div className="card-title">Assigned Tasks</div>
-            </div>
-            <button className="btn btn-secondary btn-sm" onClick={() => navigate('/employee/tasks')}>View All</button>
+        {/* Task breakdown donut */}
+        <div className="card" style={{ padding: '22px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
+            <ListChecks size={14} color="#7c3aed" />
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Task Status</span>
           </div>
-          <div style={{ padding: '8px 0' }}>
-            {tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled').slice(0, 4).map(t => {
-              const pColors = { low: '#059669', medium: '#4f46e5', high: '#d97706', urgent: '#dc2626' }
-              const color = pColors[t.priority] || '#4f46e5'
-              return (
-                <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 20px', borderBottom: '1px solid #f8fafc' }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 600, color: '#1e293b' }}>{t.title}</div>
-                    <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 1 }}>From {t.assigned_by_name}{t.deadline ? ` · Due ${t.deadline}` : ''}</div>
+          {totalTasks === 0 ? (
+            <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: 13, padding: '16px 0' }}>No tasks yet</div>
+          ) : (
+            <>
+              {(() => {
+                const size = 110, r = 38, cx = 55, cy = 55, circ = 2 * Math.PI * r
+                const segs = [
+                  { key: 'completed',   color: '#059669', count: taskBreakdown.completed },
+                  { key: 'in_progress', color: '#4f46e5', count: taskBreakdown.in_progress },
+                  { key: 'pending',     color: '#e2e8f0', count: taskBreakdown.pending },
+                ]
+                let offset = 0
+                return (
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+                    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)' }}>
+                      {segs.map(seg => {
+                        const len = (seg.count / totalTasks) * circ
+                        const el = (
+                          <circle key={seg.key} cx={cx} cy={cy} r={r}
+                            fill="none" stroke={seg.color} strokeWidth={14}
+                            strokeDasharray={`${len} ${circ - len}`}
+                            strokeDashoffset={-offset}
+                          />
+                        )
+                        offset += len
+                        return el
+                      })}
+                    </svg>
                   </div>
-                  <span style={{ background: t.status === 'in_progress' ? '#eef2ff' : '#f1f5f9', color: t.status === 'in_progress' ? '#4f46e5' : '#64748b', borderRadius: 20, padding: '2px 10px', fontSize: 11.5, fontWeight: 700 }}>
-                    {t.status.replace('_', ' ')}
-                  </span>
+                )
+              })()}
+              {[
+                { label: 'Completed',   color: '#059669', count: taskBreakdown.completed },
+                { label: 'In Progress', color: '#4f46e5', count: taskBreakdown.in_progress },
+                { label: 'Pending',     color: '#94a3b8', count: taskBreakdown.pending },
+              ].map(row => (
+                <div key={row.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: '#64748b' }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: row.color }} />
+                    {row.label}
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{row.count}</span>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+
+        {/* Recent logs */}
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <FileText size={14} color="#4f46e5" />
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Recent Logs</span>
+            <button className="btn btn-secondary btn-sm" onClick={() => navigate('/employee/logs')} style={{ marginLeft: 'auto' }}>
+              View All
+            </button>
+          </div>
+          {logs.length === 0 ? (
+            <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>No logs yet</div>
+          ) : (
+            logs.slice(0, 5).map((l, i) => {
+              const comp = l.tasks_planned > 0 ? Math.round((l.tasks_completed / l.tasks_planned) * 100) : null
+              const text = l.log_text?.trim()
+              const preview = text ? (text.length > 55 ? text.slice(0, 55) + '…' : text) : '—'
+              return (
+                <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 20px', borderBottom: i < 4 ? '1px solid #f8fafc' : 'none' }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 8, background: '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 12, fontWeight: 700, color: '#4f46e5' }}>
+                    {l.hours_worked}h
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {preview}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{l.date}</div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+                    {l.svm_category_name && (
+                      <span style={{ background: '#eef2ff', color: '#4f46e5', borderRadius: 6, padding: '2px 8px', fontSize: 10.5, fontWeight: 600 }}>{l.svm_category_name}</span>
+                    )}
+                    {comp !== null && (
+                      <span style={{ background: comp >= 80 ? '#ecfdf5' : comp >= 50 ? '#fffbeb' : '#fef2f2', color: comp >= 80 ? '#059669' : comp >= 50 ? '#d97706' : '#dc2626', borderRadius: 6, padding: '2px 8px', fontSize: 10.5, fontWeight: 600 }}>{comp}%</span>
+                    )}
+                  </div>
                 </div>
               )
-            })}
-          </div>
+            })
+          )}
         </div>
-      )}
-
-      {/* Recent Logs */}
-      <div className="card">
-        <div className="card-header">
-          <div>
-            <div className="card-title">Recent Work Logs</div>
-            <div className="card-subtitle">Your latest submissions with ML analysis</div>
-          </div>
-          <button className="btn btn-secondary btn-sm" onClick={() => navigate('/employee/submit-log')}>
-            + New Log
-          </button>
-        </div>
-        {logs.length === 0 ? (
-          <div className="card-body">
-            <div className="empty-state">
-              <FileText size={28} color="#cbd5e1" style={{ margin: '0 auto 12px', display: 'block' }} />
-              <h3>No Logs Yet</h3>
-              <p>Start by submitting your first daily work log.</p>
-            </div>
-          </div>
-        ) : (
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Description</th>
-                  <th>SVM Category</th>
-                  <th>K-Means Cluster</th>
-                  <th>Planned</th>
-                  <th>Completed</th>
-                </tr>
-              </thead>
-              <tbody>
-                {logs.slice(0, 8).map(log => (
-                  <tr key={log.id}>
-                    <td style={{ color: '#94a3b8', fontSize: 12.5, whiteSpace: 'nowrap' }}>{log.date}</td>
-                    <td style={{ maxWidth: 300 }}>
-                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13.5 }}>
-                        {log.log_text}
-                      </div>
-                    </td>
-                    <td>{log.svm_category_name ? <span className="badge badge-blue">{log.svm_category_name}</span> : <span style={{ color: '#cbd5e1' }}>—</span>}</td>
-                    <td>{log.cluster_name ? <span className="badge badge-purple">{log.cluster_name}</span> : <span style={{ color: '#cbd5e1' }}>—</span>}</td>
-                    <td style={{ color: '#64748b' }}>{log.tasks_planned}</td>
-                    <td>
-                      <strong style={{ color: log.tasks_completed >= log.tasks_planned ? '#059669' : '#d97706' }}>
-                        {log.tasks_completed}
-                      </strong>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
     </div>
   )

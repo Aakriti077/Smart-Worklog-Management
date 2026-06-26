@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle, Clock, Zap, XCircle, Calendar, User, AlertCircle } from 'lucide-react'
+import { CheckCircle, Clock, Zap, XCircle, Calendar, User, AlertCircle, RefreshCw } from 'lucide-react'
 import api from '../../api/axios'
 
 const PRIORITY_META = {
@@ -10,8 +10,9 @@ const PRIORITY_META = {
 }
 
 const STATUS_FLOW = {
-  pending:     { next: 'in_progress', label: 'Start Working', icon: Zap, color: '#4f46e5' },
+  pending:     { next: 'in_progress', label: 'Start Working', icon: Zap,        color: '#4f46e5' },
   in_progress: { next: 'completed',   label: 'Mark Complete', icon: CheckCircle, color: '#059669' },
+  completed:   { next: 'in_progress', label: 'Reopen Task',   icon: RefreshCw,   color: '#64748b' },
 }
 
 export default function MyTasks() {
@@ -32,7 +33,10 @@ export default function MyTasks() {
     try {
       const res = await api.patch(`/tasks/${task.id}/status/`, { status: newStatus })
       setTasks(prev => prev.map(t => t.id === task.id ? res.data : t))
-      showToast('success', newStatus === 'completed' ? `"${task.title}" marked as completed!` : `Started working on "${task.title}"`)
+      const msg = newStatus === 'completed' ? `"${task.title}" marked as completed!`
+        : newStatus === 'in_progress' && task.status === 'completed' ? `"${task.title}" reopened.`
+        : `Started working on "${task.title}"`
+      showToast('success', msg)
     } catch (err) {
       showToast('error', err.response?.data?.error || 'Failed to update status.')
     } finally { setUpdating(null) }
@@ -121,14 +125,14 @@ export default function MyTasks() {
 
                     {/* Status + Action */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
-                      {task.status === 'completed' && (
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#ecfdf5', color: '#059669', borderRadius: 20, padding: '5px 14px', fontSize: 13, fontWeight: 700 }}>
-                          <CheckCircle size={14} /> Completed
-                        </span>
-                      )}
                       {task.status === 'cancelled' && (
                         <span style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fef2f2', color: '#dc2626', borderRadius: 20, padding: '5px 14px', fontSize: 13, fontWeight: 700 }}>
                           <XCircle size={14} /> Cancelled
+                        </span>
+                      )}
+                      {task.status === 'completed' && (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#ecfdf5', color: '#059669', borderRadius: 20, padding: '5px 14px', fontSize: 13, fontWeight: 700 }}>
+                          <CheckCircle size={14} /> Completed
                         </span>
                       )}
                       {flow && (
@@ -137,14 +141,16 @@ export default function MyTasks() {
                           disabled={updating === task.id}
                           style={{
                             display: 'flex', alignItems: 'center', gap: 7,
-                            background: flow.color, color: '#fff', border: 'none',
-                            borderRadius: 8, padding: '7px 16px', fontWeight: 700, fontSize: 13,
+                            background: task.status === 'completed' ? '#f1f5f9' : flow.color,
+                            color: task.status === 'completed' ? '#64748b' : '#fff',
+                            border: task.status === 'completed' ? '1px solid #e2e8f0' : 'none',
+                            borderRadius: 8, padding: '6px 14px', fontWeight: 600, fontSize: 12.5,
                             cursor: 'pointer', transition: 'opacity 0.15s',
                             opacity: updating === task.id ? 0.7 : 1,
                           }}
                         >
                           {updating === task.id
-                            ? <><span className="spinner" style={{ width: 12, height: 12, borderTopColor: '#fff' }} />Updating...</>
+                            ? <><span className="spinner" style={{ width: 12, height: 12, borderTopColor: task.status === 'completed' ? '#64748b' : '#fff' }} />Updating...</>
                             : <><flow.icon size={13} />{flow.label}</>}
                         </button>
                       )}

@@ -117,12 +117,14 @@ class TaskDetailView(APIView):
 class TaskStatusUpdateView(APIView):
     permission_classes = [IsAuthenticated]
 
-    VALID_TRANSITIONS = {
+    EMPLOYEE_TRANSITIONS = {
         'pending': ['in_progress', 'cancelled'],
         'in_progress': ['completed', 'cancelled'],
-        'completed': ['cancelled'],
+        'completed': ['in_progress', 'cancelled'],
         'cancelled': [],
     }
+
+    ALL_STATUSES = ['pending', 'in_progress', 'completed', 'cancelled']
 
     def patch(self, request, pk):
         try:
@@ -130,20 +132,29 @@ class TaskStatusUpdateView(APIView):
         except Task.DoesNotExist:
             return Response({'error': 'Task not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Only the assigned employee can update status
-        if task.assigned_to != request.user:
-            return Response({'error': 'Only the assigned employee can update task status.'}, status=status.HTTP_403_FORBIDDEN)
+        user = request.user
+        is_manager_or_admin = user.role in ('manager', 'admin')
+        is_assigned_employee = task.assigned_to == user
+        is_assigning_manager = task.assigned_by == user
+
+        if not is_assigned_employee and not is_manager_or_admin:
+            return Response({'error': 'Only the assigned employee, assigning manager, or admin can update task status.'}, status=status.HTTP_403_FORBIDDEN)
 
         new_status = request.data.get('status')
         if not new_status:
             return Response({'error': 'status field is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        allowed = self.VALID_TRANSITIONS.get(task.status, [])
-        if new_status not in allowed:
-            return Response(
-                {'error': f'Invalid transition from "{task.status}" to "{new_status}". Allowed: {allowed}'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        if is_manager_or_admin:
+            # Managers and admins can set any valid status
+            if new_status not in self.ALL_STATUSES:
+                return Response({'error': f'Invalid status "{new_status}".'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            allowed = self.EMPLOYEE_TRANSITIONS.get(task.status, [])
+            if new_status not in allowed:
+                return Response(
+                    {'error': f'Invalid transition from "{task.status}" to "{new_status}". Allowed: {allowed}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
         task.status = new_status
         task.save(update_fields=['status', 'updated_at'])

@@ -1,0 +1,66 @@
+{
+  "accuracy": 0.9994,
+  "test_size": 14400,
+  "train_size": 57600,
+  "per_category": {
+    "Data Science & Analytics": {
+      "precision": 0.999,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "support": 1600.0
+    },
+    "DevOps & Infrastructure": {
+      "precision": 0.999,
+      "recall": 0.999,
+      "f1_score": 0.999,
+      "support": 1600.0
+    },
+    "Engineering": {
+      "precision": 0.998,
+      "recall": 0.998,
+      "f1_score": 0.998,
+      "support": 1600.0
+    },
+    "Finance & Accounting": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "support": 1600.0
+    },
+    "Human Resources": {
+      "precision": 1.0,
+      "recall": 0.998,
+      "f1_score": 0.999,
+      "support": 1600.0
+    },
+    "Product": {
+      "precision": 0.998,
+      "recall": 1.0,
+      "f1_score": 0.999,
+      "support": 1600.0
+    },
+    "Quality Assurance": {
+      "precision": 0.999,
+      "recall": 0.999,
+      "f1_score": 0.999,
+      "support": 1600.0
+    },
+    "Sales & Business Development": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "support": 1600.0
+    },
+    "UI/UX Design": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "support": 1600.0
+    }
+  },
+  "macro_avg": {
+    "precision": 0.999,
+    "recall": 0.999,
+    "f1_score": 0.999
+  }
+}

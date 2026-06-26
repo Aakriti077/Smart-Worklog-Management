@@ -1,50 +1,88 @@
-# Summary generation engine — auto-generates a weekly performance summary for an employee
-# Uses TF-IDF extractive summarisation plus aggregate stats
-
+import re
 from datetime import timedelta
-
-import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
 
 from worklogs.models import WorkLog
 from .models import Summary
 
 
+# ── Blocker detection ─────────────────────────────────────────────────────────
+
+_BLOCKER_PATTERNS = [
+    r'\bblocked\b', r'\bblocker\b', r'\bblocking\b',
+    r'\bwaiting for\b', r'\bwaiting on\b', r'\bpending\b',
+    r"couldn't complete", r'\bcould not complete\b',
+    r'\bunable to\b', r'\bstuck on\b', r'\bstuck\b',
+    r'\bdepends on\b', r'\bdependency\b', r'\bescalated\b',
+    r'\bno access\b', r'\bno response\b', r'\boverdue\b',
+    r'\bdelayed\b', r'\bdelay\b', r'\bneed approval\b',
+    r'\bawaiting\b', r'\bblocked by\b',
+]
+
+_BLOCKER_RE = re.compile('|'.join(_BLOCKER_PATTERNS), re.IGNORECASE)
+
+
+def detect_blockers(logs):
+    """Return a deduplicated list of sentences that signal blockers."""
+    blockers = []
+    seen = set()
+    for log in logs:
+        text = (log.log_text or '').replace('!', '.').replace('?', '.')
+        for sentence in text.split('.'):
+            s = sentence.strip()
+            if len(s) > 10 and _BLOCKER_RE.search(s):
+                key = s.lower()
+                if key not in seen:
+                    seen.add(key)
+                    blockers.append(s)
+    return blockers[:5]  # cap at 5 to keep summary concise
+
+
 # ── Extractive summarisation ──────────────────────────────────────────────────
 
-def extractive_summary(log_texts, n=3):
-    """Return the n most representative sentences using TF-IDF scoring."""
-    sentences = []
-    for text in log_texts:
-        for s in text.replace('!', '.').replace('?', '.').split('.'):
-            s = s.strip()
-            if len(s) > 15:
-                sentences.append(s)
+def extractive_summary(logs, n=3):
+    """Divide the period into n equal time bands (by log position after date-sort)
+    and pick the first unique sentence found in each band. Scanning the whole band
+    means repeated log text doesn't block a highlight — we keep looking until we
+    find something unseen. 1 Month and 1 Year cover different date ranges so their
+    bands contain different logs, producing different highlights."""
+    if not logs:
+        return []
 
-    if not sentences:
-        return ""
-    if len(sentences) <= n:
-        return '. '.join(sentences) + '.'
+    total = len(logs)
+    highlights = []
+    seen = set()
+    band_size = max(1, total // n)
 
-    try:
-        vec = TfidfVectorizer(stop_words='english', ngram_range=(1, 2))
-        mat = vec.fit_transform(sentences)
-        scores = np.array(mat.sum(axis=1)).flatten()
-        top = sorted(scores.argsort()[-n:][::-1])
-        return '. '.join(sentences[i] for i in top) + '.'
-    except Exception:
-        return '. '.join(sentences[:n]) + '.'
+    for band in range(n):
+        start = band * band_size
+        end = total if band == n - 1 else (band + 1) * band_size
+        for log in logs[start:end]:
+            text = (log.log_text or '').replace('!', '.').replace('?', '.')
+            found = False
+            for s in text.split('.'):
+                s = s.strip()
+                if len(s) > 15:
+                    key = s.lower()
+                    if key not in seen:
+                        seen.add(key)
+                        highlights.append(s)
+                        found = True
+                        break
+            if found:
+                break  # move on to the next band
+
+    return highlights
 
 
 # ── Main generator ────────────────────────────────────────────────────────────
 
-def generate_summary(user, week_start):
-    week_end = week_start + timedelta(days=6)
+def generate_summary(user, week_start, date_to=None, period_type=None):
+    week_end = date_to if date_to else week_start + timedelta(days=6)
 
     # Fetch all logs for this user in the given week, including category info
     logs = list(WorkLog.objects.filter(
         user=user, date__range=(week_start, week_end)
-    ).select_related('svm_category', 'cluster'))
+    ).select_related('svm_category', 'cluster').order_by('date'))
 
     if not logs:
         return None
@@ -81,29 +119,48 @@ def generate_summary(user, week_start):
 
     completion_rate = round(completed / planned * 100) if planned > 0 else 0
 
-    # ── Extractive AI summary from log texts ──────────────────────────────
-    log_texts = [l.log_text for l in logs]
-    ai_excerpt = extractive_summary(log_texts, n=3)
+    # 3 highlights, sampled from start/middle/end of the period window
+    highlight_list = extractive_summary(logs, n=3)
 
-    # ── Build the final rich summary text ─────────────────────────────────
-    hours_line = (
-        f' Total hours logged: {total_hours:.1f}h.'
-        if total_hours > 0 else ''
-    )
+    # ── Build structured summary text (parsed by SummaryCard in frontend) ──
+    cat_names    = ', '.join(c for c, _ in top_categories) if top_categories else 'Various'
+    cluster_names = ', '.join(c for c, _ in top_clusters) if top_clusters else 'Various'
 
-    text = (
-        f"{user.name} submitted {total} work log(s) during the week of "
-        f"{week_start.strftime('%B %d, %Y')}. "
-        f"They planned {planned} task(s) and completed {completed} "
-        f"({completion_rate}% completion rate).{hours_line} "
-        f"Top SVM categories: {cat_str}. "
-        f"Top activity clusters: {cluster_str}. "
-        f"Highlights: {ai_excerpt}"
-    )
+    highlight_lines = '\n'.join(f'• {h}' for h in highlight_list)
 
-    # Save or update the summary for this user and week
-    summary, _ = Summary.objects.update_or_create(
-        user=user, week_start=week_start,
-        defaults={'summary_text': text}
-    )
+    lines = [
+        f'Total logs: {total}',
+        f'Completion rate: {completion_rate}%',
+        f'Top categories: {cat_names}',
+        f'Top clusters: {cluster_names}',
+    ]
+    if total_hours > 0:
+        lines.insert(1, f'Total hours: {total_hours:.1f}h')
+
+    if highlight_lines:
+        lines.append('Key highlights:')
+        lines.append(highlight_lines)
+
+    # Blocker detection: scan all logs for impediment signals
+    blocker_list = detect_blockers(logs)
+    if blocker_list:
+        lines.append('Blockers detected:')
+        lines.append('\n'.join(f'⚠ {b}' for b in blocker_list))
+
+    text = '\n'.join(lines)
+
+    if period_type:
+        # Named periods (1w, 1m, 3m, 6m, 1y, all) always replace the previous record
+        # for that period so "1 Month" never creates a second card.
+        Summary.objects.filter(user=user, period_type=period_type).delete()
+        summary = Summary.objects.create(
+            user=user, week_start=week_start, period_end=week_end,
+            period_type=period_type, summary_text=text,
+        )
+    else:
+        # Date-specific summaries keep the original unique key
+        summary, _ = Summary.objects.update_or_create(
+            user=user, week_start=week_start, period_end=week_end,
+            defaults={'summary_text': text},
+        )
     return summary

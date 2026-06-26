@@ -12,7 +12,7 @@ class DepartmentListCreateView(APIView):
         return [IsManagerOrAdmin()]
 
     def get(self, request):
-        depts = Department.objects.prefetch_related('members').all()
+        depts = Department.objects.prefetch_related('members').select_related('manager').all()
         return Response(DepartmentSerializer(depts, many=True).data)
 
     def post(self, request):

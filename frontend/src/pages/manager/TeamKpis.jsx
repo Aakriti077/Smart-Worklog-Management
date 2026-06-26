@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { RefreshCw, Users, Award, TrendingUp } from 'lucide-react'
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts'
 import api from '../../api/axios'
@@ -17,39 +17,133 @@ function getGrade(n) {
   return { letter: 'D', color: '#4f46e5', bg: '#eef2ff' }
 }
 
+const PERIODS = [
+  { key: '1w',  label: '1 Week' },
+  { key: '1m',  label: '1 Month' },
+  { key: '3m',  label: '3 Months' },
+  { key: '6m',  label: '6 Months' },
+  { key: '1y',  label: '1 Year' },
+  { key: 'all', label: 'All Time' },
+]
+const PERIOD_DAYS = { '1w': 7, '1m': 30, '3m': 90, '6m': 182, '1y': 365 }
+
+function localDateStr(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
+function todayStr() { return localDateStr(new Date()) }
+
+
 export default function TeamKpis() {
   const [users, setUsers] = useState([])
   const [selectedId, setSelectedId] = useState(null)
   const [kpis, setKpis] = useState([])
+  // Per-period cache: { 'all': kpiObj, '1y': kpiObj, '6m': kpiObj, ... }
+  // Switching the period dropdown instantly shows the cached result without recalculating.
+  const [periodKpis, setPeriodKpis] = useState({})
   const [loading, setLoading] = useState(false)
   const [calculating, setCalculating] = useState(false)
   const [msg, setMsg] = useState(null)
-
+  const loadingIdRef = useRef(null)
   useEffect(() => {
     api.get('/users/').then(r => setUsers(r.data.filter(u => u.role === 'employee')))
   }, [])
 
-  const loadKpis = id => {
-    setSelectedId(id); setLoading(true); setMsg(null); setKpis([])
-    api.get(`/kpi/user/${id}/`).then(r => setKpis(r.data)).finally(() => setLoading(false))
+  const loadKpis = async id => {
+    loadingIdRef.current = id
+    setSelectedId(id); setLoading(true); setMsg(null); setKpis([]); setPeriodKpis({})
+    setCalcPeriod('all'); setCalcDate('')
+    // Auto-calculate All Time first so the initial display is meaningful
+    try {
+      const { data: allTimeKpi } = await api.post(`/kpi/calculate/${id}/`, { period: 'all' })
+      if (loadingIdRef.current === id) setPeriodKpis({ all: allTimeKpi })
+    } catch {
+      // Employee has no logs yet
+    }
+    try {
+      const { data: history } = await api.get(`/kpi/user/${id}/`)
+      if (loadingIdRef.current === id) setKpis(history)
+    } catch {
+      // ignore
+    }
+    if (loadingIdRef.current === id) setLoading(false)
   }
+
+  const [calcPeriod, setCalcPeriod] = useState('all')
+  const [calcDate, setCalcDate] = useState('')
+
+  const CALC_PERIODS = [
+    { key: 'today',     label: 'Today' },
+    { key: 'yesterday', label: 'Yesterday' },
+    { key: '1w',        label: '1 Week' },
+    { key: '1m',        label: '1 Month' },
+    { key: '3m',        label: '3 Months' },
+    { key: '6m',        label: '6 Months' },
+    { key: '1y',        label: '1 Year' },
+    { key: 'all',       label: 'All Time' },
+  ]
 
   const calculate = async () => {
     if (!selectedId) return
     setCalculating(true); setMsg(null)
     try {
-      await api.post(`/kpi/calculate/${selectedId}/`)
-      setMsg({ type: 'success', text: 'KPI calculated successfully!' })
-      loadKpis(selectedId)
+      const body = calcDate ? { date: calcDate } : { period: calcPeriod }
+      const { data: newKpi } = await api.post(`/kpi/calculate/${selectedId}/`, body)
+      const cacheKey = calcDate || calcPeriod
+      setPeriodKpis(prev => ({ ...prev, [cacheKey]: newKpi }))
+      const label = calcDate ? calcDate : CALC_PERIODS.find(p => p.key === calcPeriod)?.label
+      setMsg({ type: 'success', text: `KPI calculated for ${label}!` })
+      api.get(`/kpi/user/${selectedId}/`).then(r => setKpis(r.data))
     } catch {
-      setMsg({ type: 'error', text: 'No logs found this week. Employee must submit logs first.' })
+      const cacheKey = calcDate || calcPeriod
+      setPeriodKpis(prev => { const n = { ...prev }; delete n[cacheKey]; return n })
+      setMsg({ type: 'error', text: 'No logs found for this period. Employee must submit logs first.' })
     } finally { setCalculating(false) }
   }
 
-  const latest = kpis[0]
+  const kpiInRange = k => {
+    if (calcDate) {
+      const [y, m, d] = calcDate.split('-').map(Number)
+      const date = new Date(y, m - 1, d)
+      const day = date.getDay()
+      const diff = day === 0 ? -6 : 1 - day
+      date.setDate(date.getDate() + diff)
+      const ws = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`
+      return k.week_start === ws
+    }
+    if (calcPeriod === 'all' || !calcPeriod) return true
+    const today = todayStr()
+    if (calcPeriod === 'today') return k.week_start === today
+    if (calcPeriod === 'yesterday') {
+      const d = new Date(today); d.setDate(d.getDate() - 1)
+      return k.week_start === d.toISOString().slice(0, 10)
+    }
+    const PERIOD_DAYS = { '1w': 7, '1m': 30, '3m': 90, '6m': 182, '1y': 365 }
+    if (PERIOD_DAYS[calcPeriod]) {
+      const from = new Date(today)
+      from.setDate(from.getDate() - PERIOD_DAYS[calcPeriod])
+      return k.week_start >= from.toISOString().slice(0, 10)
+    }
+    return true
+  }
+
+  const filteredKpis = kpis.filter(kpiInRange)
+
+  // currentKpi: look up cached result for the active period key.
+  // Switching the dropdown immediately shows the right result — no stale display.
+  const activePeriodKey = calcDate || calcPeriod
+  const currentKpi = periodKpis[activePeriodKey] || null
+  const latest = currentKpi
   const grade = latest ? getGrade(parseFloat(latest.overall)) : null
   const radarData = latest ? METRICS.map(m => ({ m: m.charAt(0).toUpperCase() + m.slice(1), v: parseFloat(latest[m]) })) : []
-  const trendData = [...kpis].reverse().map(k => ({ week: k.week_start.slice(5), score: parseFloat(k.overall) }))
+  const TREND_PERIOD_DAYS = { today: 1, yesterday: 2, '1w': 7, '1m': 30, '3m': 90, '6m': 182, '1y': 365 }
+  const trendFiltered = kpis.filter(k => {
+    if (calcDate) return k.week_start >= calcDate
+    if (calcPeriod === 'all' || !calcPeriod) return true
+    const days = TREND_PERIOD_DAYS[calcPeriod]
+    if (!days) return true
+    const from = new Date(todayStr())
+    from.setDate(from.getDate() - days)
+    return k.week_start >= from.toISOString().slice(0, 10)
+  })
+  const trendData = [...trendFiltered].reverse().map(k => ({ week: k.week_start.slice(5), score: parseFloat(k.overall) }))
   const selectedUser = users.find(u => u.id === selectedId)
 
   return (
@@ -120,30 +214,51 @@ export default function TeamKpis() {
                     </div>
                   )}
                 </div>
-                <button className="btn btn-primary btn-sm" onClick={calculate} disabled={calculating}>
-                  <RefreshCw size={13} className={calculating ? 'spin' : ''} />
-                  {calculating ? 'Calculating...' : 'Calculate This Week'}
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <select
+                    value={calcDate ? '__date__' : calcPeriod}
+                    onChange={e => { setCalcPeriod(e.target.value); setCalcDate('') }}
+                    style={{
+                      padding: '6px 10px', borderRadius: 8, border: '1px solid #e2e8f0',
+                      fontSize: 13, color: '#1e293b', background: '#fff', cursor: 'pointer', outline: 'none',
+                    }}
+                  >
+                    {CALC_PERIODS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+                    {calcDate && <option value="__date__">{calcDate}</option>}
+                  </select>
+                  <input
+                    type="date"
+                    value={calcDate}
+                    onChange={e => { setCalcDate(e.target.value); if (e.target.value) setCalcPeriod('') }}
+                    max={todayStr()}
+                    title="Or pick a specific date"
+                    style={{
+                      padding: '6px 8px', borderRadius: 8,
+                      border: calcDate ? '2px solid #4f46e5' : '1px solid #e2e8f0',
+                      fontSize: 12, color: calcDate ? '#4f46e5' : '#94a3b8',
+                      background: '#fff', outline: 'none', cursor: 'pointer', width: 36,
+                    }}
+                  />
+                  {calcDate && (
+                    <button onClick={() => { setCalcDate(''); setCalcPeriod('1w') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 14, lineHeight: 1, padding: 0 }}>✕</button>
+                  )}
+                  <button className="btn btn-primary btn-sm" onClick={calculate} disabled={calculating}>
+                    <RefreshCw size={13} className={calculating ? 'spin' : ''} />
+                    {calculating ? 'Calculating...' : 'Calculate'}
+                  </button>
+                </div>
               </div>
 
               {msg && (
-                <div className={`alert alert-${msg.type === 'success' ? 'success' : 'error'}`} style={{ marginBottom: 16 }}>
-                  {msg.text}
+                <div className={`alert alert-${msg.type === 'success' ? 'success' : 'error'}`} style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>{msg.text}</span>
+                  <button onClick={() => setMsg(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 16, lineHeight: 1, padding: 0, marginLeft: 12, opacity: 0.6 }}>✕</button>
                 </div>
               )}
 
-              {kpis.length === 0 ? (
-                <div className="card">
-                  <div className="card-body">
-                    <div className="empty-state">
-                      <h3>No KPI Records</h3>
-                      <p>Click "Calculate This Week" to generate scores from {selectedUser?.name}'s submitted logs.</p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
+              {/* Metric cards + charts only when a Calculate result exists */}
+              {latest ? (
                 <>
-                  {/* Metric cards */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: 10, marginBottom: 16 }}>
                     {METRICS.map(m => (
                       <div key={m} className="card" style={{ padding: '12px 14px', minWidth: 0, overflow: 'hidden' }}>
@@ -165,7 +280,6 @@ export default function TeamKpis() {
                     ))}
                   </div>
 
-                  {/* Charts row */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
                     <div className="card">
                       <div className="card-header"><div className="card-title">Skill Radar</div></div>
@@ -197,40 +311,62 @@ export default function TeamKpis() {
                           </ResponsiveContainer>
                         ) : (
                           <div className="empty-state" style={{ padding: 24 }}>
-                            <p style={{ fontSize: 13 }}>Need at least 2 weeks of data for trend.</p>
+                            <p style={{ fontSize: 13 }}>Need at least 2 KPI records for trend.</p>
                           </div>
                         )}
                       </div>
                     </div>
                   </div>
-
-                  {/* History table */}
-                  <div className="card">
-                    <div className="card-header">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}><Award size={14} color="#4f46e5" /><div className="card-title">KPI History</div></div>
-                    </div>
-                    <div className="table-wrap">
-                      <table className="table">
-                        <thead>
-                          <tr><th>Week</th><th>Productivity</th><th>Consistency</th><th>Quality</th><th>Leadership</th><th>Collaboration</th><th>Overall</th></tr>
-                        </thead>
-                        <tbody>
-                          {kpis.map(k => (
-                            <tr key={k.id}>
-                              <td style={{ fontSize: 12.5, color: '#64748b' }}>{k.week_start}</td>
-                              {['productivity','consistency','quality','leadership','collaboration'].map(m => (
-                                <td key={m} style={{ fontWeight: 600, color: scoreColor(k[m]) }}>{parseFloat(k[m]).toFixed(0)}</td>
-                              ))}
-                              <td>
-                                <span style={{ fontWeight: 800, fontSize: 14, color: scoreColor(k.overall) }}>{parseFloat(k.overall).toFixed(1)}</span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                </>
+              ) : (
+                <div className="card" style={{ marginBottom: 16 }}>
+                  <div className="card-body">
+                    <div className="empty-state">
+                      <h3>{kpis.length === 0 ? 'No KPI Records' : `No Score for ${CALC_PERIODS.find(p => p.key === calcPeriod)?.label || calcDate || 'This Period'}`}</h3>
+                      <p>
+                        {kpis.length === 0
+                          ? `${selectedUser?.name} has no logs yet. They must submit work logs before KPIs can be calculated.`
+                          : `Click "Calculate" to compute the ${CALC_PERIODS.find(p => p.key === calcPeriod)?.label || calcDate || 'selected period'} KPI score.`}
+                      </p>
                     </div>
                   </div>
-                </>
+                </div>
+              )}
+
+              {/* KPI History — always visible once records exist */}
+              {kpis.length > 0 && (
+                <div className="card">
+                  <div className="card-header">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}><Award size={14} color="#4f46e5" /><div className="card-title">KPI History</div></div>
+                  </div>
+                  <div className="table-wrap">
+                    <table className="table">
+                      <thead>
+                        <tr><th>Week</th><th>Productivity</th><th>Consistency</th><th>Quality</th><th>Leadership</th><th>Collaboration</th><th>Overall</th></tr>
+                      </thead>
+                      <tbody>
+                        {filteredKpis.length === 0 ? (
+                          <tr><td colSpan={7}>
+                            <div className="empty-state" style={{ padding: 16 }}>
+                              <h3>No Records in This Range</h3>
+                              <p>Try a wider time range or clear the date filter.</p>
+                            </div>
+                          </td></tr>
+                        ) : filteredKpis.map(k => (
+                          <tr key={k.id}>
+                            <td style={{ fontSize: 12.5, color: '#64748b' }}>{k.week_start}</td>
+                            {['productivity','consistency','quality','leadership','collaboration'].map(m => (
+                              <td key={m} style={{ fontWeight: 600, color: scoreColor(k[m]) }}>{parseFloat(k[m]).toFixed(0)}</td>
+                            ))}
+                            <td>
+                              <span style={{ fontWeight: 800, fontSize: 14, color: scoreColor(k.overall) }}>{parseFloat(k.overall).toFixed(1)}</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               )}
             </>
           )}

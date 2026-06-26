@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Trash2, Search, ToggleLeft, ToggleRight, Users, GitBranch, KeyRound, X, CheckCircle, AlertCircle } from 'lucide-react'
+import { Plus, Trash2, Search, ToggleLeft, ToggleRight, KeyRound, X, CheckCircle, AlertCircle, Pencil } from 'lucide-react'
 import api from '../../api/axios'
 
 /* ── Small in-app confirmation/modal helper ── */
@@ -71,82 +71,116 @@ function ResetPasswordModal({ user, onClose, onDone }) {
   )
 }
 
-/* ── Org Chart ── */
-function OrgChart({ users }) {
-  const managers = users.filter(u => u.role === 'manager')
-  const employees = users.filter(u => u.role === 'employee')
 
-  const deptGroups = managers.reduce((acc, mgr) => {
-    const deptEmployees = employees.filter(e => e.department_name && e.department_name === mgr.department_name)
-    if (!acc[mgr.department_name]) acc[mgr.department_name] = { manager: mgr, employees: deptEmployees }
-    return acc
-  }, {})
+/* ── Edit User Modal ── */
+function EditUserModal({ user, departments, onClose, onSaved }) {
+  const [name, setName] = useState(user.name)
+  const [email, setEmail] = useState(user.email)
+  const [role, setRole] = useState(user.role)
+  const [department, setDepartment] = useState(user.department || '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const submit = async e => {
+    e.preventDefault()
+    if (!name.trim()) return setError('Name cannot be empty.')
+    if (!email.trim() || !email.includes('@')) return setError('Enter a valid email address.')
+    setSaving(true); setError('')
+    try {
+      await api.put(`/users/${user.id}/`, { name: name.trim(), email: email.trim(), role, department: department || null })
+      onSaved()
+    } catch (err) {
+      setError(err?.response?.data?.email?.[0] || err?.response?.data?.name?.[0] || 'Failed to save changes.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
-    <div style={{ padding: '20px 24px' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24 }}>
-        {[
-          { label: 'Managers', value: managers.length, color: '#d97706', bg: '#fffbeb' },
-          { label: 'Employees', value: employees.length, color: '#059669', bg: '#ecfdf5' },
-          { label: 'Departments', value: Object.keys(deptGroups).length, color: '#4f46e5', bg: '#eef2ff' },
-        ].map(s => (
-          <div key={s.label} style={{ background: s.bg, borderRadius: 10, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontSize: 13, fontWeight: 500, color: '#64748b' }}>{s.label}</div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</div>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: 16 }}>
+      <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 420, boxShadow: '0 24px 64px rgba(15,23,42,0.18)' }}>
+        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#1e293b' }}>Edit User</div>
+            <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>{user.name} · {user.email}</div>
           </div>
-        ))}
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={18} /></button>
+        </div>
+        <form onSubmit={submit} style={{ padding: '20px 24px' }}>
+          {error && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: '#dc2626' }}>{error}</div>}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="form-group">
+              <label className="form-label">Name</label>
+              <input className="form-input" value={name} onChange={e => setName(e.target.value)} required />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Email</label>
+              <input className="form-input" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="form-group">
+              <label className="form-label">Role</label>
+              <select className="form-input" value={role} onChange={e => setRole(e.target.value)}>
+                <option value="employee">Employee</option>
+                <option value="manager">Manager</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Department</label>
+              <select className="form-input" value={department} onChange={e => setDepartment(e.target.value)}>
+                <option value="">No Department</option>
+                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={onClose} disabled={saving}>Cancel</button>
+            <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
+              {saving ? <><span className="spinner" style={{ width: 12, height: 12 }} />Saving...</> : 'Save Changes'}
+            </button>
+          </div>
+        </form>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {Object.entries(deptGroups).map(([deptName, { manager: mgr, employees: emps }]) => (
-          <div key={deptName} style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden' }}>
-            <div style={{ background: '#1e293b', padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontWeight: 700, color: '#fff', fontSize: 13.5 }}>{deptName}</span>
-              <span style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.45)', background: 'rgba(255,255,255,0.08)', borderRadius: 20, padding: '2px 10px' }}>
-                {emps.length} employee{emps.length !== 1 ? 's' : ''}
-              </span>
-            </div>
-            <div style={{ padding: '14px 18px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 9, marginBottom: 12 }}>
-                <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#fef3c7', color: '#d97706', fontSize: 12.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '2px solid #fcd34d' }}>
-                  {mgr.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 13.5, color: '#1e293b' }}>{mgr.name}</div>
-                  <div style={{ fontSize: 12, color: '#92400e' }}>{mgr.email}</div>
-                </div>
-                <span style={{ background: '#fef3c7', color: '#d97706', border: '1px solid #fcd34d', borderRadius: 20, padding: '2px 10px', fontSize: 11.5, fontWeight: 700 }}>Manager</span>
-              </div>
-              {emps.length > 0 ? (
-                <div style={{ paddingLeft: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
-                  {emps.map(emp => (
-                    <div key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, opacity: emp.is_active ? 1 : 0.5 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#ecfdf5', color: '#059669', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        {emp.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1e293b' }}>{emp.name}</div>
-                        <div style={{ fontSize: 11, color: emp.is_active ? '#059669' : '#dc2626' }}>{emp.is_active ? 'Active' : 'Inactive'}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ paddingLeft: 16, fontSize: 13, color: '#94a3b8', fontStyle: 'italic' }}>No employees in this department yet</div>
-              )}
-            </div>
-          </div>
-        ))}
-        {managers.filter(m => !m.department_name).map(mgr => (
-          <div key={mgr.id} style={{ border: '1px dashed #e2e8f0', borderRadius: 12, padding: '14px 18px', background: '#fafafa', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#fef3c7', color: '#d97706', fontSize: 11.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {mgr.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-            </div>
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 13, color: '#1e293b' }}>{mgr.name}</div>
-              <div style={{ fontSize: 12, color: '#94a3b8' }}>Manager — no department assigned</div>
-            </div>
-          </div>
-        ))}
+    </div>
+  )
+}
+
+const PAGE_SIZE = 10
+
+function Pagination({ page, total, onChange }) {
+  const totalPages = Math.ceil(total / PAGE_SIZE)
+  if (totalPages <= 1) return null
+  const pages = []
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i)
+  } else if (page <= 4) {
+    pages.push(1, 2, 3, 4, 5, '…', totalPages)
+  } else if (page >= totalPages - 3) {
+    pages.push(1, '…', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages)
+  } else {
+    pages.push(1, '…', page - 1, page, page + 1, '…', totalPages)
+  }
+  const btn = (label, target, disabled, active = false) => (
+    <button key={label} onClick={() => onChange(target)} disabled={disabled} style={{
+      minWidth: 32, height: 32, padding: '0 10px', border: active ? 'none' : '1px solid #e2e8f0',
+      borderRadius: 7, background: active ? '#4f46e5' : disabled ? '#f8fafc' : '#fff',
+      color: active ? '#fff' : disabled ? '#cbd5e1' : '#1e293b',
+      fontWeight: active ? 700 : 500, fontSize: 13, cursor: disabled ? 'default' : 'pointer',
+    }}>{label}</button>
+  )
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderTop: '1px solid #f1f5f9' }}>
+      <span style={{ fontSize: 12.5, color: '#94a3b8' }}>
+        {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
+      </span>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+        {btn('←', page - 1, page === 1)}
+        {pages.map((p, i) => p === '…'
+          ? <span key={`d${i}`} style={{ padding: '0 4px', color: '#94a3b8', fontSize: 13 }}>…</span>
+          : btn(p, p, false, p === page)
+        )}
+        {btn('→', page + 1, page === totalPages)}
       </div>
     </div>
   )
@@ -162,14 +196,16 @@ export default function AdminUsers() {
   const [formLoading, setFormLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('')
-  const [tab, setTab] = useState('list')
   const [toast, setToast] = useState(null)
+  const [page, setPage] = useState(1)
 
   // Confirm toggle state: { user, action ('enable'|'disable') }
   const [confirmToggle, setConfirmToggle] = useState(null)
   const [toggleLoading, setToggleLoading] = useState(false)
   // Reset password modal
   const [resetUser, setResetUser] = useState(null)
+  // Edit user modal
+  const [editUser, setEditUser] = useState(null)
   // Delete confirm
   const [deleteUser, setDeleteUser] = useState(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -216,16 +252,20 @@ export default function AdminUsers() {
       setDeleteUser(null)
       load()
       showToast('success', `${deleteUser.name} deleted.`)
-    } catch { showToast('error', 'Delete failed.') }
+    } catch (err) { showToast('error', err.response?.data?.error || 'Delete failed.') }
     finally { setDeleteLoading(false) }
   }
 
   const filtered = users.filter(u => {
+    if (u.role === 'admin') return false
     const ms = u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase())
     const mr = !roleFilter || u.role === roleFilter
     return ms && mr
   })
 
+  useEffect(() => setPage(1), [search, roleFilter])
+
+  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const roleColor = { admin: '#4f46e5', manager: '#d97706', employee: '#059669' }
 
   return (
@@ -237,55 +277,30 @@ export default function AdminUsers() {
         </div>
       )}
 
-      {/* Tab switcher */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-        {[{ key: 'list', label: 'User List', icon: Users }, { key: 'org', label: 'Org Structure', icon: GitBranch }].map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)} style={{
-            display: 'flex', alignItems: 'center', gap: 7, padding: '7px 16px', borderRadius: 9, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13.5,
-            background: tab === t.key ? '#eef2ff' : '#fff', color: tab === t.key ? '#4f46e5' : '#64748b',
-            boxShadow: tab === t.key ? '0 0 0 2px #818cf840' : '0 1px 3px rgba(0,0,0,0.07)',
-          }}>
-            <t.icon size={14} />{t.label}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'org' ? (
-        <div className="card" style={{ padding: 0 }}>
-          <div style={{ padding: '14px 22px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 14.5, color: '#1e293b' }}>Organisation Structure</div>
-              <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 1 }}>Manager → Employee department hierarchy</div>
-            </div>
-            <button className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}><Plus size={13} /> Add User</button>
-          </div>
-          <OrgChart users={users} />
-        </div>
-      ) : (
-        <div className="card">
-          <div className="card-header" style={{ flexWrap: 'wrap', gap: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Search size={14} color="#94a3b8" />
-              <input className="form-input" style={{ border: 'none', padding: '4px 0', outline: 'none', width: 200 }} placeholder="Search users..." value={search} onChange={e => setSearch(e.target.value)} />
-              <select className="form-input" style={{ width: 130, padding: '5px 10px' }} value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
+      <div className="card">
+          <div className="card-header" style={{ padding: '16px 24px', flexWrap: 'wrap', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid #e2e8f0', borderRadius: 8, padding: '6px 12px', background: '#fff' }}>
+                <Search size={14} color="#94a3b8" />
+                <input style={{ border: 'none', outline: 'none', fontSize: 13.5, width: 190, color: '#1e293b', background: 'transparent' }} placeholder="Search users..." value={search} onChange={e => setSearch(e.target.value)} />
+              </div>
+              <select className="form-input" style={{ width: 130, padding: '7px 10px', fontSize: 13.5 }} value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
                 <option value="">All Roles</option>
                 <option value="employee">Employee</option>
                 <option value="manager">Manager</option>
-                <option value="admin">Admin</option>
               </select>
-              <span style={{ fontSize: 12.5, color: '#94a3b8' }}>{filtered.length} users</span>
             </div>
             <button className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}><Plus size={13} /> Add User</button>
           </div>
-          <div className="table-wrap">
+          <div className="table-wrap" style={{ minHeight: 580 }}>
             <table className="table">
               <thead>
                 <tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th><th>Status</th><th>Joined</th><th>Actions</th></tr>
               </thead>
               <tbody>
-                {filtered.map(u => (
+                {paged.map(u => (
                   <tr key={u.id} style={{ opacity: u.is_active ? 1 : 0.6 }}>
-                    <td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div style={{ width: 30, height: 30, borderRadius: '50%', background: (roleColor[u.role] || '#4f46e5') + '15', color: roleColor[u.role] || '#4f46e5', fontSize: 10.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                           {u.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
@@ -324,6 +339,16 @@ export default function AdminUsers() {
                         >
                           {u.is_active ? <><ToggleRight size={13} />Disable</> : <><ToggleLeft size={13} />Enable</>}
                         </button>
+                        {/* Edit role/department — not available for admin accounts */}
+                        {u.role !== 'admin' && (
+                          <button
+                            onClick={() => setEditUser(u)}
+                            title="Edit user"
+                            style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#f0fdf4', color: '#059669', border: 'none', borderRadius: 7, padding: '5px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                          >
+                            <Pencil size={12} />Edit
+                          </button>
+                        )}
                         {/* Reset password */}
                         <button
                           onClick={() => setResetUser(u)}
@@ -348,8 +373,8 @@ export default function AdminUsers() {
             </table>
             {filtered.length === 0 && <div className="empty-state"><h3>No Users Found</h3></div>}
           </div>
+          <Pagination page={page} total={filtered.length} onChange={setPage} />
         </div>
-      )}
 
       {/* Create user modal */}
       {showCreate && (
@@ -380,7 +405,6 @@ export default function AdminUsers() {
                     <select className="form-input" value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}>
                       <option value="employee">Employee</option>
                       <option value="manager">Manager</option>
-                      <option value="admin">Admin</option>
                     </select>
                   </div>
                   <div className="form-group">
@@ -413,6 +437,16 @@ export default function AdminUsers() {
           loading={toggleLoading}
           onConfirm={handleToggle}
           onCancel={() => setConfirmToggle(null)}
+        />
+      )}
+
+      {/* Edit user modal */}
+      {editUser && (
+        <EditUserModal
+          user={editUser}
+          departments={departments}
+          onClose={() => setEditUser(null)}
+          onSaved={() => { setEditUser(null); load(); showToast('success', 'User updated successfully.') }}
         />
       )}
 

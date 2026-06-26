@@ -3,14 +3,15 @@ import { Cpu, Layers, RefreshCw, Zap, Send, CheckCircle, AlertCircle, BarChart2 
 import api from '../../api/axios'
 
 const CAT_COLORS = {
-  'Backend Development':  '#4f46e5',
-  'Frontend Development': '#7c3aed',
-  'Testing':              '#059669',
-  'Code Review':          '#0891b2',
-  'Documentation':        '#d97706',
-  'Meetings':             '#dc2626',
-  'DevOps':               '#ea580c',
-  'Research':             '#6d28d9',
+  'Engineering':                  '#4f46e5',
+  'DevOps & Infrastructure':      '#ea580c',
+  'Data Science & Analytics':     '#6d28d9',
+  'Quality Assurance':            '#059669',
+  'Human Resources':              '#0891b2',
+  'Product':                      '#d97706',
+  'Sales & Business Development': '#dc2626',
+  'Finance & Accounting':         '#ca8a04',
+  'UI/UX Design':                 '#db2777',
 }
 
 const CLUSTER_COLORS = ['#4f46e5','#059669','#d97706','#0891b2','#dc2626']

@@ -3,14 +3,15 @@ import { CheckCircle, Cpu, Layers, Send, ListChecks, Clock, Target, Sparkles, Ch
 import api from '../../api/axios'
 
 const CATEGORY_COLORS = {
-  'Backend Development':  '#4f46e5',
-  'Frontend Development': '#7c3aed',
-  'Testing':              '#059669',
-  'Code Review':          '#0891b2',
-  'Documentation':        '#d97706',
-  'Meetings':             '#dc2626',
-  'DevOps':               '#ea580c',
-  'Research':             '#6d28d9',
+  'Engineering':                  '#4f46e5',
+  'DevOps & Infrastructure':      '#ea580c',
+  'Data Science & Analytics':     '#6d28d9',
+  'Quality Assurance':            '#059669',
+  'Human Resources':              '#0891b2',
+  'Product':                      '#d97706',
+  'Sales & Business Development': '#dc2626',
+  'Finance & Accounting':         '#ca8a04',
+  'UI/UX Design':                 '#db2777',
 }
 
 const PRIORITY_META = {
@@ -57,45 +58,25 @@ export default function SubmitLog() {
 
   return (
     <div className="page">
-      {/* Hero header */}
-      <div style={{
-        background: 'linear-gradient(135deg,#312e81,#4f46e5)',
-        borderRadius: 16, padding: '24px 28px', marginBottom: 24,
-        display: 'flex', alignItems: 'center', gap: 20,
-        position: 'relative', overflow: 'hidden',
-      }}>
-        <div style={{ position: 'absolute', right: -20, top: -20, width: 130, height: 130, borderRadius: '50%', background: 'rgba(255,255,255,0.07)', pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', right: 70, bottom: -30, width: 80, height: 80, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', pointerEvents: 'none' }} />
-        <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Send size={22} color="#fff" />
-        </div>
-        <div>
-          <div style={{ fontSize: 18, fontWeight: 800, color: '#fff', marginBottom: 3 }}>Submit Work Log</div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)' }}>
-            Describe your work — ML will automatically classify and cluster it. Link to an assigned task optionally.
-          </div>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 20, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 20, alignItems: 'stretch' }}>
         {/* ── Left: Form ── */}
-        <div>
+        <div className="card" style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column' }}>
           {success && (
-            <div style={{ background: '#ecfdf5', border: '1px solid #bbf7d0', borderRadius: 12, padding: '14px 18px', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13.5, color: '#065f46' }}>
-              <CheckCircle size={18} color="#059669" />
+            <div style={{ background: '#ecfdf5', border: '1px solid #bbf7d0', borderRadius: 10, padding: '12px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13.5, color: '#065f46' }}>
+              <CheckCircle size={16} color="#059669" />
               <div>
                 <strong>Log submitted!</strong> ML classification applied automatically.
-                {result?.task_title && <span style={{ marginLeft: 6 }}>Linked to task: <strong>{result.task_title}</strong></span>}
+                {result?.task_title && <span style={{ marginLeft: 6 }}>Linked to: <strong>{result.task_title}</strong></span>}
               </div>
             </div>
           )}
           {error && (
-            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, padding: '14px 18px', marginBottom: 18, fontSize: 13.5, color: '#dc2626' }}>
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 16px', marginBottom: 20, fontSize: 13.5, color: '#dc2626' }}>
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
             {/* Task selector */}
             {myTasks.length > 0 && (
               <div style={{ marginBottom: 20 }}>
@@ -137,7 +118,7 @@ export default function SubmitLog() {
             )}
 
             {/* Log text */}
-            <div className="form-group">
+            <div className="form-group" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
               <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Sparkles size={13} color="var(--primary)" /> Work Description *
@@ -150,17 +131,13 @@ export default function SubmitLog() {
                 className="form-input"
                 value={form.log_text}
                 onChange={e => setForm({ ...form, log_text: e.target.value })}
-                rows={5}
                 placeholder="Describe what you worked on today. Be specific — the ML model uses your text to classify and cluster your work.&#10;&#10;e.g. Fixed authentication bug in login flow. Collaborated with team on API design. Researched caching strategies."
                 required
-                style={{ resize: 'vertical', lineHeight: 1.6 }}
+                style={{ flex: 1, resize: 'none', lineHeight: 1.6, minHeight: 120 }}
               />
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-                <div className="form-hint">Include action verbs: fixed, built, reviewed, collaborated, researched...</div>
-                {form.log_text.length > 0 && form.log_text.length < 30 && (
-                  <div style={{ fontSize: 11.5, color: '#d97706' }}>Too short — add more detail</div>
-                )}
-              </div>
+              {form.log_text.length > 0 && form.log_text.length < 30 && (
+                <div style={{ fontSize: 11.5, color: '#d97706', marginTop: 5 }}>Too short — add more detail</div>
+              )}
             </div>
 
             {/* Numbers row */}

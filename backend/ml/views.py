@@ -1,7 +1,9 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
-from .classifier import classify_log, TRAINING_DATA, retrain
+from rest_framework.permissions import IsAuthenticated
+from users.permissions import IsAdmin
+from .classifier import classify_log, retrain, get_eval_report
+from .training_data import generate_training_data
 from .clusterer import assign_cluster
 
 
@@ -31,13 +33,14 @@ class MLInfoView(APIView):
         clusters = list(Cluster.objects.values_list('name', flat=True))
 
         # Count training examples per category
+        training_data = generate_training_data()
         label_counts = {}
-        for _, label in TRAINING_DATA:
+        for _, label in training_data:
             label_counts[label] = label_counts.get(label, 0) + 1
 
         return Response({
             'svm': {
-                'total_training': len(TRAINING_DATA),
+                'total_training': len(training_data),
                 'categories': categories,
                 'label_counts': label_counts,
             },
@@ -50,13 +53,23 @@ class MLInfoView(APIView):
 
 class RetrainView(APIView):
     """POST /api/ml/retrain/ — admin-only force retrain of the SVM model."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdmin]
 
     def post(self, request):
-        if request.user.role != 'admin':
-            return Response({'error': 'Admin only'}, status=403)
         try:
             retrain()
-            return Response({'message': 'Model retrained successfully.'})
+            report = get_eval_report()
+            return Response({'message': 'Model retrained successfully.', 'eval': report})
         except Exception as e:
             return Response({'error': str(e)}, status=500)
+
+
+class EvalReportView(APIView):
+    """GET /api/ml/eval/ — return the latest model evaluation report."""
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        report = get_eval_report()
+        if not report:
+            return Response({'error': 'No evaluation report found. Retrain the model first.'}, status=404)
+        return Response(report)

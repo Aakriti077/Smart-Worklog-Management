@@ -62,16 +62,26 @@ export default function Profile() {
 
   const initials = (user?.name || 'U').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
   const roleGrad = {
-    admin:    'linear-gradient(135deg,#4f46e5,#7c3aed)',
-    manager:  'linear-gradient(135deg,#d97706,#f59e0b)',
-    employee: 'linear-gradient(135deg,#059669,#10b981)',
+    admin:    'transparent',
+    manager:  'transparent',
+    employee: 'transparent',
   }
+  const roleBorder = {
+    admin:    '1px solid #e2e8f0',
+    manager:  '1px solid #e2e8f0',
+    employee: '1px solid #e2e8f0',
+  }
+  const roleTextColor = { admin: '#1e293b', manager: '#1e293b', employee: '#1e293b' }
+  const roleSubColor  = { admin: '#64748b', manager: '#64748b', employee: '#64748b' }
+  const roleBadgeBg   = { admin: 'rgba(0,0,0,0.06)', manager: 'rgba(0,0,0,0.06)', employee: 'rgba(0,0,0,0.06)' }
+  const roleBadgeColor = { admin: '#1e293b', manager: '#1e293b', employee: '#1e293b' }
 
   return (
     <div className="page">
       {/* ── Hero banner ── */}
       <div style={{
         background: roleGrad[user?.role] || roleGrad.employee,
+        border: roleBorder[user?.role] || 'none',
         borderRadius: 16,
         padding: '32px 36px',
         marginBottom: 24,
@@ -80,29 +90,34 @@ export default function Profile() {
         gap: 24,
         position: 'relative',
         overflow: 'hidden',
+        boxShadow: roleBorder[user?.role] ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
       }}>
-        {/* Decorative blobs */}
-        <div style={{ position: 'absolute', right: -30, top: -30, width: 160, height: 160, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', right: 80, bottom: -40, width: 100, height: 100, borderRadius: '50%', background: 'rgba(255,255,255,0.07)', pointerEvents: 'none' }} />
+        {/* Decorative blobs — only for gradient roles */}
+        {!roleBorder[user?.role] && <>
+          <div style={{ position: 'absolute', right: -30, top: -30, width: 160, height: 160, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', right: 80, bottom: -40, width: 100, height: 100, borderRadius: '50%', background: 'rgba(255,255,255,0.07)', pointerEvents: 'none' }} />
+        </>}
 
         <div style={{
           width: 72, height: 72, borderRadius: '50%',
-          background: 'rgba(255,255,255,0.25)',
+          background: roleBorder[user?.role] ? '#eef2ff' : 'rgba(255,255,255,0.25)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 26, fontWeight: 800, color: '#fff', flexShrink: 0,
-          border: '3px solid rgba(255,255,255,0.4)',
+          fontSize: 26, fontWeight: 800,
+          color: roleBorder[user?.role] ? '#4f46e5' : '#fff',
+          flexShrink: 0,
+          border: roleBorder[user?.role] ? '3px solid #e0e7ff' : '3px solid rgba(255,255,255,0.4)',
         }}>
           {initials}
         </div>
         <div style={{ position: 'relative', zIndex: 1 }}>
-          <div style={{ fontSize: 24, fontWeight: 800, color: '#fff' }}>{user?.name}</div>
-          <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.75)', marginTop: 3 }}>{user?.email}</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: roleTextColor[user?.role] || '#fff' }}>{user?.name}</div>
+          <div style={{ fontSize: 14, color: roleSubColor[user?.role] || 'rgba(255,255,255,0.75)', marginTop: 3 }}>{user?.email}</div>
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-            <span style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', borderRadius: 20, padding: '3px 12px', fontSize: 12, fontWeight: 600, textTransform: 'capitalize' }}>
+            <span style={{ background: roleBadgeBg[user?.role] || 'rgba(255,255,255,0.2)', color: roleBadgeColor[user?.role] || '#fff', borderRadius: 20, padding: '3px 12px', fontSize: 12, fontWeight: 600, textTransform: 'capitalize' }}>
               {user?.role}
             </span>
             {user?.department_name && (
-              <span style={{ background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.85)', borderRadius: 20, padding: '3px 12px', fontSize: 12, fontWeight: 500 }}>
+              <span style={{ background: roleBadgeBg[user?.role] || 'rgba(255,255,255,0.15)', color: roleSubColor[user?.role] || 'rgba(255,255,255,0.85)', borderRadius: 20, padding: '3px 12px', fontSize: 12, fontWeight: 500 }}>
                 {user.department_name}
               </span>
             )}

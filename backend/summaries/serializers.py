@@ -7,4 +7,4 @@ class SummarySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Summary
-        fields = ['id', 'user', 'user_name', 'week_start', 'summary_text', 'generated_at']
+        fields = ['id', 'user', 'user_name', 'week_start', 'period_end', 'period_type', 'summary_text', 'generated_at']

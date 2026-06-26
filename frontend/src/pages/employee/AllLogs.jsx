@@ -87,15 +87,90 @@ function EditModal({ log, onClose, onSaved }) {
   )
 }
 
+const PAGE_SIZE = 10
+
+function Pagination({ page, total, onChange }) {
+  const totalPages = Math.ceil(total / PAGE_SIZE)
+  if (totalPages <= 1) return null
+  const pages = []
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i)
+  } else if (page <= 4) {
+    pages.push(1, 2, 3, 4, 5, '…', totalPages)
+  } else if (page >= totalPages - 3) {
+    pages.push(1, '…', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages)
+  } else {
+    pages.push(1, '…', page - 1, page, page + 1, '…', totalPages)
+  }
+  const btn = (label, target, disabled, active = false) => (
+    <button key={label} onClick={() => onChange(target)} disabled={disabled} style={{
+      minWidth: 32, height: 32, padding: '0 10px', border: active ? 'none' : '1px solid #e2e8f0',
+      borderRadius: 7, background: active ? '#4f46e5' : disabled ? '#f8fafc' : '#fff',
+      color: active ? '#fff' : disabled ? '#cbd5e1' : '#1e293b',
+      fontWeight: active ? 700 : 500, fontSize: 13, cursor: disabled ? 'default' : 'pointer',
+    }}>{label}</button>
+  )
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderTop: '1px solid #f1f5f9' }}>
+      <span style={{ fontSize: 12.5, color: '#94a3b8' }}>
+        {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total} logs
+      </span>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+        {btn('←', page - 1, page === 1)}
+        {pages.map((p, i) => p === '…'
+          ? <span key={`d${i}`} style={{ padding: '0 4px', color: '#94a3b8', fontSize: 13 }}>…</span>
+          : btn(p, p, false, p === page)
+        )}
+        {btn('→', page + 1, page === totalPages)}
+      </div>
+    </div>
+  )
+}
+
+const PERIODS = [
+  { key: 'today',     label: 'Today' },
+  { key: 'yesterday', label: 'Yesterday' },
+  { key: '1w',        label: '1 Week' },
+  { key: '1m',        label: '1 Month' },
+  { key: '3m',        label: '3 Months' },
+  { key: '6m',        label: '6 Months' },
+  { key: '1y',        label: '1 Year' },
+  { key: 'all',       label: 'All Time' },
+]
+const PERIOD_DAYS = { '1w': 7, '1m': 30, '3m': 90, '6m': 182, '1y': 365 }
+function todayStr() { return new Date().toISOString().slice(0, 10) }
+
 export default function EmployeeLogs() {
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [filterCat, setFilterCat] = useState('')
+  const [period, setPeriod] = useState('all')
+  const [dateFilter, setDateFilter] = useState('')
   const [editLog, setEditLog] = useState(null)
   const [deleteId, setDeleteId] = useState(null)
+  const [page, setPage] = useState(1)
   const [deleting, setDeleting] = useState(false)
   const [toast, setToast] = useState(null)
+
+  const handlePeriod = p => { setPeriod(p); setDateFilter('') }
+  const handleDatePick = d => { setDateFilter(d); if (d) setPeriod(''); else setPeriod('all') }
+
+  const dateInRange = log => {
+    if (dateFilter) return log.date === dateFilter
+    const today = todayStr()
+    if (period === 'today') return log.date === today
+    if (period === 'yesterday') {
+      const d = new Date(today); d.setDate(d.getDate() - 1)
+      return log.date === d.toISOString().slice(0, 10)
+    }
+    if (period === 'all' || !period) return true
+    if (PERIOD_DAYS[period]) {
+      const from = new Date(today)
+      from.setDate(from.getDate() - PERIOD_DAYS[period])
+      return log.date >= from.toISOString().slice(0, 10)
+    }
+    return true
+  }
 
   useEffect(() => {
     api.get('/worklogs/').then(r => setLogs(r.data)).finally(() => setLoading(false))
@@ -126,17 +201,17 @@ export default function EmployeeLogs() {
     }
   }
 
-  const categories = [...new Set(logs.filter(l => l.svm_category_name).map(l => l.svm_category_name))]
-
   const filtered = logs.filter(l => {
     const matchSearch = !search || l.log_text.toLowerCase().includes(search.toLowerCase())
-    const matchCat = !filterCat || l.svm_category_name === filterCat
-    return matchSearch && matchCat
+    return matchSearch && dateInRange(l)
   })
 
-  const totalHours = logs.reduce((s, l) => s + (parseFloat(l.hours_worked) || 0), 0)
-  const avgCompletion = logs.length
-    ? Math.round(logs.reduce((s, l) => s + (l.tasks_planned ? l.tasks_completed / l.tasks_planned : 0), 0) / logs.length * 100)
+  useEffect(() => setPage(1), [search, period, dateFilter])
+  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
+  const totalHours = filtered.reduce((s, l) => s + (parseFloat(l.hours_worked) || 0), 0)
+  const avgCompletion = filtered.length
+    ? Math.round(filtered.reduce((s, l) => s + (l.tasks_planned ? l.tasks_completed / l.tasks_planned : 0), 0) / filtered.length * 100)
     : 0
 
   if (loading) return <div className="loading-page"><div className="spinner" /></div>
@@ -162,7 +237,7 @@ export default function EmployeeLogs() {
       {/* Stats row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 20 }}>
         {[
-          { label: 'Total Logs', value: logs.length, icon: CheckSquare, color: '#4f46e5', bg: '#eef2ff' },
+          { label: 'Total Logs', value: filtered.length, icon: CheckSquare, color: '#4f46e5', bg: '#eef2ff' },
           { label: 'Total Hours', value: totalHours.toFixed(1) + 'h', icon: Clock, color: '#d97706', bg: '#fffbeb' },
           { label: 'Avg Completion', value: avgCompletion + '%', icon: CheckCircle, color: '#059669', bg: '#ecfdf5' },
         ].map(s => (
@@ -180,7 +255,7 @@ export default function EmployeeLogs() {
 
       {/* Table card */}
       <div className="card">
-        <div className="card-header" style={{ flexWrap: 'wrap', gap: 10 }}>
+        <div className="card-header" style={{ padding: '16px 24px', flexWrap: 'wrap', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 200 }}>
             <Search size={14} color="#94a3b8" />
             <input
@@ -192,15 +267,36 @@ export default function EmployeeLogs() {
             />
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <select className="btn btn-secondary btn-sm" value={filterCat} onChange={e => setFilterCat(e.target.value)}>
-              <option value="">All Categories</option>
-              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            <select
+              value={dateFilter ? '__date__' : period}
+              onChange={e => handlePeriod(e.target.value)}
+              className="form-input"
+              style={{ width: 120, padding: '5px 10px' }}
+            >
+              {PERIODS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+              {dateFilter && <option value="__date__">{dateFilter}</option>}
             </select>
-            <span style={{ fontSize: 12.5, color: '#94a3b8' }}>{filtered.length} logs</span>
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={e => handleDatePick(e.target.value)}
+              max={todayStr()}
+              title="Pick a specific date"
+              style={{
+                padding: '5px 8px', borderRadius: 8,
+                border: dateFilter ? '2px solid #4f46e5' : '1px solid #e2e8f0',
+                fontSize: 12, color: dateFilter ? '#4f46e5' : '#94a3b8',
+                background: '#fff', outline: 'none', cursor: 'pointer', width: 36,
+              }}
+            />
+            {dateFilter && (
+              <button onClick={() => handleDatePick('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 14, lineHeight: 1, padding: 0 }}>✕</button>
+            )}
+            <span style={{ fontSize: 12.5, color: '#94a3b8', whiteSpace: 'nowrap' }}>{filtered.length} logs</span>
           </div>
         </div>
 
-        <div className="table-wrap">
+        <div className="table-wrap" style={{ minHeight: 580 }}>
           <table className="table">
             <thead>
               <tr>
@@ -214,16 +310,16 @@ export default function EmployeeLogs() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(log => {
+              {paged.map(log => {
                 const rate = log.tasks_planned ? Math.round(log.tasks_completed / log.tasks_planned * 100) : null
                 return (
                   <tr key={log.id}>
                     <td style={{ whiteSpace: 'nowrap' }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>{log.date}</div>
                     </td>
-                    <td style={{ maxWidth: 280 }}>
-                      <div style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.5 }}>
-                        {log.log_text.length > 90 ? log.log_text.slice(0, 90) + '…' : log.log_text}
+                    <td style={{ maxWidth: 400 }}>
+                      <div style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.55, wordBreak: 'break-word' }}>
+                        {log.log_text}
                       </div>
                     </td>
                     <td>
@@ -266,15 +362,18 @@ export default function EmployeeLogs() {
                   </tr>
                 )
               })}
+              {filtered.length === 0 && (
+                <tr><td colSpan={7}>
+                  <div className="empty-state" style={{ padding: 20 }}>
+                    <h3>No Logs Found</h3>
+                    <p>{logs.length === 0 ? 'Submit your first work log to get started.' : 'Try clearing the filters.'}</p>
+                  </div>
+                </td></tr>
+              )}
             </tbody>
           </table>
-          {filtered.length === 0 && (
-            <div className="empty-state">
-              <h3>No Logs Found</h3>
-              <p>{logs.length === 0 ? 'Submit your first work log to get started.' : 'Try clearing the filters.'}</p>
-            </div>
-          )}
         </div>
+        <Pagination page={page} total={filtered.length} onChange={setPage} />
       </div>
 
       {/* Edit modal */}

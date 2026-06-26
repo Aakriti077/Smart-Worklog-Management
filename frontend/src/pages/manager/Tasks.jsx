@@ -99,6 +99,19 @@ function CreateTaskModal({ employees, onClose, onCreated }) {
   )
 }
 
+const PERIODS = [
+  { key: 'today',     label: 'Today' },
+  { key: 'yesterday', label: 'Yesterday' },
+  { key: '1w',        label: '1 Week' },
+  { key: '1m',        label: '1 Month' },
+  { key: '3m',        label: '3 Months' },
+  { key: '6m',        label: '6 Months' },
+  { key: '1y',        label: '1 Year' },
+  { key: 'all',       label: 'All Time' },
+]
+const PERIOD_DAYS = { '1w': 7, '1m': 30, '3m': 90, '6m': 182, '1y': 365 }
+function todayStr() { return new Date().toISOString().slice(0, 10) }
+
 export default function ManagerTasks() {
   const [tasks, setTasks] = useState([])
   const [employees, setEmployees] = useState([])
@@ -110,6 +123,30 @@ export default function ManagerTasks() {
   const [toast, setToast] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [period, setPeriod] = useState('all')
+  const [dateFilter, setDateFilter] = useState('')
+
+  const handlePeriod = p => { setPeriod(p); setDateFilter('') }
+  const handleDatePick = d => { setDateFilter(d); if (d) setPeriod(''); else setPeriod('all') }
+
+  const taskInRange = t => {
+    const taskDate = t.created_at?.slice(0, 10)
+    if (!taskDate) return true
+    if (dateFilter) return taskDate === dateFilter
+    const today = todayStr()
+    if (period === 'today') return taskDate === today
+    if (period === 'yesterday') {
+      const d = new Date(today); d.setDate(d.getDate() - 1)
+      return taskDate === d.toISOString().slice(0, 10)
+    }
+    if (period === 'all' || !period) return true
+    if (PERIOD_DAYS[period]) {
+      const from = new Date(today)
+      from.setDate(from.getDate() - PERIOD_DAYS[period])
+      return taskDate >= from.toISOString().slice(0, 10)
+    }
+    return true
+  }
 
   const load = () => {
     Promise.all([api.get('/tasks/team/'), api.get('/users/')])
@@ -131,6 +168,16 @@ export default function ManagerTasks() {
     showToast('success', `Task "${task.title}" assigned to ${task.assigned_to_name}.`)
   }
 
+  const handleStatusChange = async (task, newStatus) => {
+    try {
+      const res = await api.patch(`/tasks/${task.id}/status/`, { status: newStatus })
+      setTasks(prev => prev.map(t => t.id === task.id ? res.data : t))
+      showToast('success', `"${task.title}" status changed to ${STATUS_META[newStatus]?.label || newStatus}.`)
+    } catch (err) {
+      showToast('error', err.response?.data?.error || 'Failed to update status.')
+    }
+  }
+
   const handleDelete = async () => {
     if (!deleteTarget) return
     setDeleteLoading(true)
@@ -146,7 +193,7 @@ export default function ManagerTasks() {
   const filtered = tasks.filter(t => {
     const ms = !filterStatus || t.status === filterStatus
     const me = !filterEmployee || t.assigned_to == filterEmployee
-    return ms && me
+    return ms && me && taskInRange(t)
   })
 
   if (loading) return <div className="loading-page"><div className="spinner" /></div>
@@ -175,6 +222,37 @@ export default function ManagerTasks() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Period dropdown + date picker */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, justifyContent: 'flex-end' }}>
+        <select
+          value={dateFilter ? '__date__' : period}
+          onChange={e => handlePeriod(e.target.value)}
+          style={{
+            padding: '6px 10px', borderRadius: 8, border: '1px solid #e2e8f0',
+            fontSize: 13, color: '#1e293b', background: '#fff', cursor: 'pointer', outline: 'none',
+          }}
+        >
+          {PERIODS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+          {dateFilter && <option value="__date__">{dateFilter}</option>}
+        </select>
+        <input
+          type="date"
+          value={dateFilter}
+          onChange={e => handleDatePick(e.target.value)}
+          max={todayStr()}
+          title="Pick a specific date"
+          style={{
+            padding: '6px 8px', borderRadius: 8,
+            border: dateFilter ? '2px solid #4f46e5' : '1px solid #e2e8f0',
+            fontSize: 12, color: dateFilter ? '#4f46e5' : '#94a3b8',
+            background: '#fff', outline: 'none', cursor: 'pointer', width: 36,
+          }}
+        />
+        {dateFilter && (
+          <button onClick={() => handleDatePick('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 14, lineHeight: 1, padding: 0 }}>✕</button>
+        )}
       </div>
 
       {/* Task list card */}
@@ -210,14 +288,14 @@ export default function ManagerTasks() {
           <div className="table-wrap">
             <table className="table">
               <thead>
-                <tr><th>Task</th><th>Assigned To</th><th>Priority</th><th>Status</th><th>Deadline</th><th>Logs</th><th></th></tr>
+                <tr><th>Task</th><th>Assigned To</th><th>Priority</th><th>Status</th><th>Deadline</th><th></th></tr>
               </thead>
               <tbody>
                 {filtered.map(t => (
                   <tr key={t.id}>
-                    <td style={{ maxWidth: 260 }}>
+                    <td style={{ maxWidth: 320 }}>
                       <div style={{ fontWeight: 600, fontSize: 13.5, color: '#1e293b' }}>{t.title}</div>
-                      {t.description && <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 240 }}>{t.description}</div>}
+                      {t.description && <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2, lineHeight: 1.5, wordBreak: 'break-word' }}>{t.description}</div>}
                     </td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -228,14 +306,25 @@ export default function ManagerTasks() {
                       </div>
                     </td>
                     <td><PriorityBadge p={t.priority} /></td>
-                    <td><StatusBadge s={t.status} /></td>
+                    <td>
+                      <select
+                        value={t.status}
+                        onChange={e => handleStatusChange(t, e.target.value)}
+                        style={{
+                          background: STATUS_META[t.status]?.bg || '#f1f5f9',
+                          color: STATUS_META[t.status]?.color || '#64748b',
+                          border: 'none', borderRadius: 20, padding: '3px 10px',
+                          fontSize: 11.5, fontWeight: 700, cursor: 'pointer', outline: 'none',
+                        }}
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                      </select>
+                    </td>
                     <td style={{ fontSize: 12.5, color: t.deadline && new Date(t.deadline) < new Date() && t.status !== 'completed' ? '#dc2626' : '#64748b' }}>
                       {t.deadline || <span style={{ color: '#cbd5e1' }}>—</span>}
-                    </td>
-                    <td>
-                      <span style={{ fontSize: 12, background: '#f1f5f9', borderRadius: 20, padding: '2px 8px', color: '#64748b', fontWeight: 600 }}>
-                        {t.log_count ?? 0} logs
-                      </span>
                     </td>
                     <td>
                       <button onClick={() => setDeleteTarget(t)} style={{ background: '#fef2f2', border: 'none', borderRadius: 6, padding: '5px 8px', cursor: 'pointer', color: '#dc2626' }} title="Delete">
